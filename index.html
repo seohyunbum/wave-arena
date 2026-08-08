@@ -121,7 +121,7 @@
       <button id="shopClose">닫기</button>
     </div>
     <div class="ssec">
-      <h3>포탑 <small>길 옆에 세워져 함께 적을 공격 · 같은 레벨 2개 합체 = 상위 등급</small></h3>
+      <h3>포탑 <small>함께 적을 공격 · 원하는 곳으로 이동 · 같은 레벨 2개 합체 = 상위 등급</small></h3>
       <div class="pots" id="turBuyGrid"></div>
       <div class="pots" style="margin-top:6px">
         <button id="mergeTurret" class="buy merge"></button>
@@ -129,9 +129,9 @@
       </div>
       <div class="tlist" id="turList"></div>
       <div class="thint" id="turSlotInfo"></div>
-      <div class="thint">포탑을 끌어서 빈 자리에 놓으면 <b style="color:#8ad3ff">이동</b>,
+      <div class="thint">포탑을 끌어서 <b style="color:#8ad3ff">아무 곳에나</b> 놓을 수 있습니다(길 위도 가능).
         같은 레벨 포탑 위에 놓으면 <b style="color:#ffd166">합체</b>.
-        탭으로 고른 뒤 빈 자리를 탭해도 옮겨집니다.</div>
+        탭으로 고른 뒤 원하는 곳을 탭해도 옮겨집니다.</div>
     </div>
     <div class="ssec">
       <h3>무기 <small id="weaponCur"></small></h3>
@@ -194,7 +194,9 @@ const CFG = {
   // ---- 포탑 ----
   // turretCostMul = 구매할수록 오르는 폭(완만하게) / turretTierCostMul = 등급당 가격 배수
   // → 합체가 항상 더 싸고, 상위 등급 직접 구매는 "비싼 지름길"이 되도록 맞춤
-  turretSlots:14, turretCost0:110, turretCostMul:1.06, turretSellFrac:0.5, turretTierCostMul:3.2,
+  // turretMax = 보유 가능한 포탑 수 (자리는 고정되지 않고 어디든 자유 배치)
+  turretMax:14, turretGap:38, turretEdge:34,   // 포탑끼리 최소 간격 / 맵 가장자리 여백
+  turretCost0:110, turretCostMul:1.06, turretSellFrac:0.5, turretTierCostMul:3.2,
   // style = 등급별 외형 / base·body·hh = 크기 / bl·bw·bn = 총열 길이·굵기·개수
   turretTiers:[
     {n:'목재 포탑',  dmg:16,  range:210, fire:0.85, col:'#a9743a', top:'#d0964e', style:'wood',
@@ -267,7 +269,7 @@ function buildTurretSlots(){
     const a=WP[i], b=WP[i+1], L=Math.hypot(b.x-a.x,b.y-a.y);
     segs.push({a,b,L,s:total}); total+=L;
   }
-  const N=CFG.turretSlots, out=[];
+  const N=CFG.turretMax, out=[];
   for(let i=0;i<N;i++){
     const t=(i+0.5)/N*total;
     const sg=segs.find(s=>t>=s.s && t<=s.s+s.L) || segs[segs.length-1];
@@ -286,7 +288,17 @@ function buildTurretSlots(){
   }
   return out;
 }
-const TSLOTS = buildTurretSlots();
+const TSPOTS = buildTurretSlots();   // 구매 시 처음 놓이는 위치(이후 자유롭게 이동 가능)
+
+// 화면 좌표 → 월드 좌표 (지면 z=0 평면 기준) : 포탑을 끌어다 놓을 때 사용
+function screenToWorld(sx,sy){
+  const A=(sx-CAM.ox)/CAM.scale/ISO_X;          // rx-ry
+  const B=(sy-CAM.oy)/CAM.scale/ISO_Y;          // rx+ry
+  const rx=(A+B)/2, ry=(B-A)/2;
+  const px=rx-WORLD.w/2, py=ry-WORLD.h/2;       // 뷰 회전 되돌리기
+  return {x:WORLD.w/2 + px*CAM.cos + py*CAM.sin,
+          y:WORLD.h/2 - px*CAM.sin + py*CAM.cos};
+}
 
 // ---- 아이소메트릭 카메라 ----
 const ISO_X=0.866, ISO_Y=0.5, Z_HEAD=110;
@@ -501,16 +513,7 @@ function buildGround(){
   g.fillStyle='rgba(255,90,106,.45)';
   g.beginPath(); g.ellipse(isoX(s0.x,s0.y),isoY(s0.x,s0.y,1), 38*ISO_X*1.42*CAM.scale, 38*ISO_Y*1.42*CAM.scale,0,0,7); g.fill();
 
-  // 포탑 자리 표시
-  g.lineWidth=Math.max(1,2*CAM.scale); g.setLineDash([5*CAM.scale,5*CAM.scale]);
-  for(const s of TSLOTS){
-    const rx=20*ISO_X*1.42*CAM.scale, ry=20*ISO_Y*1.42*CAM.scale;
-    g.fillStyle='rgba(167,139,250,.30)';
-    g.beginPath(); g.ellipse(isoX(s.x,s.y),isoY(s.x,s.y,0.8), rx, ry,0,0,7); g.fill();
-    g.strokeStyle='rgba(200,180,255,.85)';
-    g.beginPath(); g.ellipse(isoX(s.x,s.y),isoY(s.x,s.y,0.8), rx, ry,0,0,7); g.stroke();
-  }
-  g.setLineDash([]);
+  // (포탑은 정해진 자리 없이 어디에나 놓을 수 있으므로 자리 표시는 그리지 않는다)
 }
 
 function resize(){
@@ -528,7 +531,7 @@ const G = {
   upTotal:0, upToward:0, spawnTimer:0, nextBossLevel:5, levelOffset:0,
   weaponTier:0, armorTier:0, shopOpen:false, potionField:[], buffs:{rageT:0,luckT:0,guardT:0},
   allies:[], enemies:[], shots:[], fx:[], nums:[],
-  turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1, anim:0, dragPos:null,
+  turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1, anim:0, dropInfo:null,
 };
 
 // ---- 기록(하이스코어) : localStorage 영속 ----
@@ -597,19 +600,39 @@ function turretCost(tier){
   return Math.round(CFG.turretCost0*Math.pow(CFG.turretTierCostMul,tier||0)
                     *Math.pow(CFG.turretCostMul,G.turretsBought));
 }
-function freeSlot(){
-  for(let i=0;i<TSLOTS.length;i++){ if(!G.turrets.some(t=>t.slot===i)) return i; }
-  return -1;
+// 그 자리에 놓을 수 있는지 : 맵 안 + 다른 포탑과 겹치지 않음 (길 위에도 놓을 수 있다)
+function canPlace(x,y,exclude){
+  const m=CFG.turretEdge;
+  if(x<m || y<m || x>WORLD.w-m || y>WORLD.h-m) return false;
+  for(const t of G.turrets){
+    if(t===exclude) continue;
+    if((t.x-x)**2+(t.y-y)**2 < CFG.turretGap*CFG.turretGap) return false;
+  }
+  return true;
+}
+// 구매한 포탑이 처음 놓일 자리 (기본 배치 지점 → 없으면 주변을 훑어 빈 곳)
+function spawnSpot(){
+  for(const s of TSPOTS){ if(canPlace(s.x,s.y,null)) return {x:s.x,y:s.y}; }
+  for(let r=CFG.turretGap; r<600; r+=26){
+    for(let a=0;a<16;a++){
+      const th=a*Math.PI/8, s=TSPOTS[0];
+      const x=s.x+Math.cos(th)*r, y=s.y+Math.sin(th)*r;
+      if(canPlace(x,y,null)) return {x,y};
+    }
+  }
+  return null;
 }
 function buyTurret(tier){
   tier=Math.max(0,Math.min(CFG.turretTiers.length-1, tier|0));
   if(G.phase==='over') return;
-  const cost=turretCost(tier), slot=freeSlot();
-  if(slot<0){ floatText(baseNode().x,baseNode().y,'포탑 자리가 가득 찼습니다','#ff8a97'); return; }
+  if(G.turrets.length>=CFG.turretMax){
+    floatText(baseNode().x,baseNode().y,'포탑은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
+  const cost=turretCost(tier);
   if(G.gold<cost) return;
+  const s=spawnSpot();
+  if(!s){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
   G.gold-=cost; G.turretsBought++;
-  const s=TSLOTS[slot];
-  G.turrets.push({slot, tier, x:s.x, y:s.y, cd:Math.random()*0.4, shootFlash:0, aim:0, aimT:null});
+  G.turrets.push({tier, x:s.x, y:s.y, cd:Math.random()*0.4, shootFlash:0, aim:0, aimT:null});
   floatText(s.x,s.y,'🏰 '+CFG.turretTiers[tier].n+' 건설!','#8ad3ff');
   burst(s.x,s.y,CFG.turretTiers[tier].top,10);
   updateShop();
@@ -627,13 +650,11 @@ function mergeTurrets(src,dst){
   burst(dst.x,dst.y,'#ffd166',16);
   return true;
 }
-function moveTurret(t,slot){                            // 포탑을 빈 자리로 이동
-  if(!t || slot<0 || slot>=TSLOTS.length) return false;
-  if(G.turrets.some(x=>x.slot===slot)) return false;    // 이미 다른 포탑이 있는 자리
-  const s=TSLOTS[slot];
+function moveTurret(t,x,y){                             // 포탑을 원하는 위치로 이동
+  if(!t || !canPlace(x,y,t)) return false;
   burst(t.x,t.y,'#8ad3ff',6);
-  t.slot=slot; t.x=s.x; t.y=s.y;
-  floatText(s.x,s.y,'↔ 포탑 이동','#8ad3ff');
+  t.x=x; t.y=y;
+  floatText(x,y,'↔ 포탑 이동','#8ad3ff');
   G.selTurret=null;
   return true;
 }
@@ -836,16 +857,20 @@ function draw(){
   ctx.clearRect(0,0,W,H);
   if(ground) ctx.drawImage(ground,0,0,W,H);
 
-  // 포탑을 고르거나 끄는 중이면 "여기로 옮길 수 있어요" 표시
-  if(G.selTurret || G.dragPos){
-    const pulse=0.55+0.45*Math.sin(G.anim*5);
-    for(let i=0;i<TSLOTS.length;i++){
-      if(G.turrets.some(t=>t.slot===i)) continue;
-      const s=TSLOTS[i], rx=22*ISO_X*1.42*CAM.scale, ry=22*ISO_Y*1.42*CAM.scale;
-      ctx.fillStyle='rgba(255,209,102,'+(0.14+0.12*pulse)+')';
-      ctx.beginPath(); ctx.ellipse(isoX(s.x,s.y),isoY(s.x,s.y,1), rx, ry,0,0,7); ctx.fill();
-      ctx.strokeStyle='rgba(255,209,102,'+(0.5+0.4*pulse)+')'; ctx.lineWidth=Math.max(1,2.2*CAM.scale);
-      ctx.beginPath(); ctx.ellipse(isoX(s.x,s.y),isoY(s.x,s.y,1), rx, ry,0,0,7); ctx.stroke();
+  // 끌고 있는 포탑 아래에 놓을 수 있는지 표시 (초록=가능, 노랑=합체, 빨강=불가)
+  if(G.dropInfo && G.selTurret){
+    const t=G.selTurret, d=G.dropInfo;
+    const col = d.merge ? '255,209,102' : d.ok ? '56,232,176' : '255,90,106';
+    const R=Math.max(CFG.turretGap/2, CFG.turretTiers[t.tier].base*0.8);   // 받침보다 크게 → 가려지지 않음
+    const rx=R*ISO_X*1.42*CAM.scale, ry=R*ISO_Y*1.42*CAM.scale;
+    ctx.fillStyle='rgba('+col+',.22)';
+    ctx.beginPath(); ctx.ellipse(isoX(t.x,t.y),isoY(t.x,t.y,1), rx, ry,0,0,7); ctx.fill();
+    ctx.strokeStyle='rgba('+col+',.95)'; ctx.lineWidth=Math.max(1,2.5*CAM.scale);
+    ctx.beginPath(); ctx.ellipse(isoX(t.x,t.y),isoY(t.x,t.y,1), rx, ry,0,0,7); ctx.stroke();
+    if(d.merge){                                   // 합체 대상도 함께 강조
+      const M=Math.max(CFG.turretGap/2, CFG.turretTiers[d.merge.tier].base*0.8);
+      ctx.beginPath(); ctx.ellipse(isoX(d.merge.x,d.merge.y),isoY(d.merge.x,d.merge.y,1),
+        M*ISO_X*1.42*CAM.scale, M*ISO_Y*1.42*CAM.scale,0,0,7); ctx.stroke();
     }
   }
 
@@ -905,7 +930,7 @@ function draw(){
   ctx.globalAlpha=1;
 
   if(G.phase==='idle'){ banner('“시작”을 누르면 적이 길을 따라 몰려옵니다','rgba(232,236,246,.95)');
-    subline('상점에서 포탑 구매 · 포탑을 끌어서 이동 · 같은 레벨끼리 겹치면 합체!','#c8b4ff',52);
+    subline('상점에서 포탑 구매 · 끌어서 원하는 곳에 배치 · 같은 레벨끼리 겹치면 합체!','#c8b4ff',52);
     if(RECORDS.bestTime>0){ ctx.textAlign='center'; ctx.font='bold 14px Segoe UI'; ctx.lineWidth=4; ctx.strokeStyle='rgba(0,0,0,.6)';
       const s='🏆 최고 기록  '+RECORDS.bestTime.toFixed(0)+'초 · '+RECORDS.bestKills+'킬 · Lv'+RECORDS.bestLevel;
       ctx.strokeText(s,W/2,74); ctx.fillStyle='#ffd166'; ctx.fillText(s,W/2,74); } }
@@ -921,7 +946,7 @@ function drawTurret(g,t){
   const baseH=8+t.tier*0.8, headZ=baseH+T.hh, headH=10+t.tier*1.4;
   const side=(o,f)=>[t.x+ca*(f||0)-sa*o, t.y+sa*(f||0)+ca*o]; // (좌우 o, 앞뒤 f) → 월드 좌표
 
-  if(sel){                                                    // 선택 링
+  if(sel && !G.dropInfo){                                     // 선택 링(드래그 중엔 드롭 표시로 대체)
     g.strokeStyle='#ffd166'; g.lineWidth=Math.max(1,2.5*CAM.scale);
     g.beginPath(); g.ellipse(isoX(t.x,t.y),isoY(t.x,t.y,1), (T.base*0.8)*ISO_X*1.42*CAM.scale, (T.base*0.8)*ISO_Y*1.42*CAM.scale,0,0,7); g.stroke();
   }
@@ -1013,7 +1038,7 @@ function updateHUD(){
   document.getElementById('kills').textContent=G.kills;
   document.getElementById('gold').textContent=Math.floor(G.gold);
   document.getElementById('allies').textContent=G.allies.filter(a=>!a.dead).length;
-  document.getElementById('turrets').textContent=G.turrets.length+'/'+TSLOTS.length;
+  document.getElementById('turrets').textContent=G.turrets.length+'/'+CFG.turretMax;
   document.getElementById('uplv').textContent='Lv '+G.upTotal;
   document.getElementById('next').textContent='다음 아군 '+G.upToward+'/'+CFG.perMilestone;
   const bf=[];
@@ -1080,16 +1105,16 @@ function closeShop(){ G.shopOpen=false; document.getElementById('shop').style.di
 function updateShop(){
   document.getElementById('shopGold').textContent=Math.floor(G.gold);
   // 포탑 : 등급별 직접 구매 버튼
-  const slot=freeSlot();
+  const full=G.turrets.length>=CFG.turretMax;
   for(let i=0;i<CFG.turretTiers.length;i++){
     const T=CFG.turretTiers[i], b=document.getElementById('buyTur_'+i), c=turretCost(i);
     b.textContent='Lv'+(i+1)+' '+T.n+'\n공격 '+T.dmg+' · 💰'+c;
-    b.disabled = (slot<0) || G.gold<c;
+    b.disabled = full || G.gold<c;
     b.style.borderLeft='4px solid '+T.top;
   }
   document.getElementById('turSlotInfo').textContent =
-    slot<0 ? '⚠ 포탑 자리가 가득 찼습니다 ('+TSLOTS.length+'/'+TSLOTS.length+')'
-           : '빈 자리 '+(TSLOTS.length-G.turrets.length)+'/'+TSLOTS.length;
+    full ? '⚠ 포탑은 최대 '+CFG.turretMax+'개까지 (합체하면 자리가 생깁니다)'
+         : '보유 '+G.turrets.length+'/'+CFG.turretMax+'개 · 산 포탑은 화면에서 끌어 원하는 곳에 배치';
   const maxTier=CFG.turretTiers.length-1;
   let pair=-1;
   for(let i=maxTier-1;i>=0;i--){ if(G.turrets.filter(t=>t.tier===i).length>=2){ pair=i; break; } }
@@ -1200,39 +1225,39 @@ function dropBossReward(e){
   for(let i=0;i<rolls;i++){ const r=rollReward(cT); r.apply(); floatText(px,py-42-i*22,'🎁 '+r.label,'#8ad3ff'); }
 }
 
-// ---- 포탑 조작 : 끌어서 이동/합체 + 탭해서 선택 → 빈 자리 탭으로 이동 ----
+// ---- 포탑 조작 : 끌어서 아무 곳으로나 이동 / 같은 레벨 위에 놓으면 합체 ----
 function ptOf(ev){ const r=cv.getBoundingClientRect(); return {mx:ev.clientX-r.left, my:ev.clientY-r.top}; }
-function turretAt(mx,my){
+function turretAt(mx,my,exclude){
   let hit=null, bd=46*46;
   for(const t of G.turrets){
+    if(t===exclude) continue;
     const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,muzzleZ(t));
     const d=(sx-mx)**2+(sy-my)**2; if(d<bd){ bd=d; hit=t; }
   }
   return hit;
 }
-function emptySlotAt(mx,my){                                 // 커서 근처의 빈 자리
-  let best=-1, bd=52*52;
-  for(let i=0;i<TSLOTS.length;i++){
-    if(G.turrets.some(t=>t.slot===i)) continue;
-    const s=TSLOTS[i], sx=isoX(s.x,s.y), sy=isoY(s.x,s.y,10);
-    const d=(sx-mx)**2+(sy-my)**2; if(d<bd){ bd=d; best=i; }
-  }
-  return best;
-}
-let dragT=null, dragOn=false, dpx=0, dpy=0;
+let dragT=null, dragOn=false, dpx=0, dpy=0, grabX=0, grabY=0, dragFrom=null;
 cv.addEventListener('pointerdown', ev=>{
   if(G.shopOpen||G.phase==='over') return;
   const {mx,my}=ptOf(ev);
   const hit=turretAt(mx,my);
-  dragT=hit; dragOn=false; dpx=mx; dpy=my;
-  if(!hit){                                                  // 빈 자리를 탭 → 선택한 포탑 이동
-    if(G.selTurret){ const s=emptySlotAt(mx,my); if(s>=0){ moveTurret(G.selTurret,s); return; } }
-    G.selTurret=null; return;
+  if(!hit){                                                  // 빈 곳을 탭 → 고른 포탑을 그 자리로
+    if(G.selTurret){
+      const w=screenToWorld(mx,my);
+      if(!moveTurret(G.selTurret,w.x,w.y)) floatText(w.x,w.y,'여기엔 놓을 수 없습니다','#ff8a97');
+      return;
+    }
+    return;
   }
+  const w=screenToWorld(mx,my);
+  dragT=hit; dragOn=false; dpx=mx; dpy=my;
+  grabX=hit.x-w.x; grabY=hit.y-w.y;                          // 잡은 지점과의 상대 위치 유지
+  dragFrom={x:hit.x, y:hit.y};                               // 못 놓으면 되돌릴 원래 자리
   if(!G.selTurret || G.selTurret===hit){ G.selTurret=(G.selTurret===hit)?null:hit; return; }
   if(G.selTurret.tier===hit.tier){
     if(!mergeTurrets(G.selTurret,hit)){                      // 최고 등급은 합체 불가
       floatText(hit.x,hit.y,'최고 등급은 합체할 수 없습니다','#ff8a97'); G.selTurret=null; }
+    dragT=null;
   } else {
     floatText(hit.x,hit.y,'같은 레벨끼리만 합체됩니다','#ff8a97'); G.selTurret=hit;
   }
@@ -1240,26 +1265,39 @@ cv.addEventListener('pointerdown', ev=>{
 cv.addEventListener('pointermove', ev=>{
   if(!dragT) return;
   const {mx,my}=ptOf(ev);
-  if(!dragOn && Math.hypot(mx-dpx,my-dpy)>12) dragOn=true;   // 12px 이상 움직이면 드래그 시작
-  if(dragOn){ G.dragPos={x:mx,y:my}; G.selTurret=dragT; }
+  if(!dragOn && Math.hypot(mx-dpx,my-dpy)>10) dragOn=true;   // 10px 이상 움직이면 드래그 시작
+  if(!dragOn) return;
+  const w=screenToWorld(mx,my);
+  dragT.x=w.x+grabX; dragT.y=w.y+grabY;                      // 포탑이 손가락을 따라옴
+  G.selTurret=dragT;
+  const over=turretAt(mx,my,dragT);
+  G.dropInfo={ ok:canPlace(dragT.x,dragT.y,dragT), merge:(over&&over.tier===dragT.tier)?over:null, over:over };
 });
 function endDrag(ev){
-  if(dragT && dragOn && G.turrets.indexOf(dragT)>=0){
-    const {mx,my}=ptOf(ev);
-    const other=turretAt(mx,my);
-    if(other && other!==dragT){                              // 다른 포탑 위에 놓기 → 합체 시도
-      if(other.tier===dragT.tier){
-        if(!mergeTurrets(dragT,other)) floatText(other.x,other.y,'최고 등급은 합체할 수 없습니다','#ff8a97');
-      } else floatText(other.x,other.y,'같은 레벨끼리만 합체됩니다','#ff8a97');
+  if(dragT && dragOn){
+    const {mx,my}=ptOf(ev), over=turretAt(mx,my,dragT);
+    if(over && over.tier===dragT.tier && over.tier<CFG.turretTiers.length-1){
+      dragT.x=dragFrom.x; dragT.y=dragFrom.y;                // 합체는 대상 자리에서
+      mergeTurrets(dragT,over);
+    } else if(over){
+      dragT.x=dragFrom.x; dragT.y=dragFrom.y;                // 합체 불가 → 원위치
+      floatText(over.x,over.y, over.tier===dragT.tier?'최고 등급은 합체할 수 없습니다':'같은 레벨끼리만 합체됩니다','#ff8a97');
+    } else if(canPlace(dragT.x,dragT.y,dragT)){
+      burst(dragT.x,dragT.y,'#8ad3ff',6);
+      floatText(dragT.x,dragT.y,'↔ 포탑 이동','#8ad3ff');
+      G.selTurret=null;
     } else {
-      const s=emptySlotAt(mx,my);
-      if(s>=0) moveTurret(dragT,s);
+      floatText(dragT.x,dragT.y,'여기엔 놓을 수 없습니다','#ff8a97');
+      dragT.x=dragFrom.x; dragT.y=dragFrom.y;                // 겹치거나 맵 밖 → 원위치
     }
   }
-  dragT=null; dragOn=false; G.dragPos=null;
+  dragT=null; dragOn=false; G.dropInfo=null;
 }
 cv.addEventListener('pointerup', endDrag);
-cv.addEventListener('pointercancel', ()=>{ dragT=null; dragOn=false; G.dragPos=null; });
+cv.addEventListener('pointercancel', ()=>{
+  if(dragT&&dragOn&&dragFrom){ dragT.x=dragFrom.x; dragT.y=dragFrom.y; }
+  dragT=null; dragOn=false; G.dropInfo=null;
+});
 
 document.getElementById('rotBtn').onclick=rotateView;
 document.getElementById('shopBtn').onclick=openShop;
