@@ -67,6 +67,12 @@
   .buy:disabled{opacity:.45}
   .buy.heal{background:#1f6b4a}
   .buy.doll{background:#4a2f6b}
+  .buy.tur{background:#1f4a6b}
+  .buy.merge{background:#6b5a1f}
+  .tlist{display:flex; flex-wrap:wrap; gap:4px; margin-top:8px}
+  .tchip{font-size:11px; background:#0e1428; border:1px solid #2b3552; border-radius:8px; padding:3px 7px; color:var(--muted)}
+  .tchip b{color:var(--text)}
+  .thint{font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5}
   .pots{display:grid; grid-template-columns:1fr 1fr; gap:6px}
   .pots .buy{font-size:12.5px; padding:8px 12px; line-height:1.25}
 </style>
@@ -79,6 +85,7 @@
     <div class="stat"><div class="k">처치</div><div class="v" id="kills">0</div></div>
     <div class="stat"><div class="k">골드</div><div class="v gold" id="gold">0</div></div>
     <div class="stat"><div class="k">아군</div><div class="v" id="allies">3</div></div>
+    <div class="stat"><div class="k">포탑</div><div class="v" id="turrets">0</div></div>
     <div class="stat"><div class="k">강화</div><div class="v" id="uplv">Lv 0</div></div>
     <div class="spacer"></div>
     <span class="tag" id="next">다음 아군 0/5</span>
@@ -112,6 +119,16 @@
       <h2>상점</h2>
       <span class="g">보유 골드 💰<b id="shopGold">0</b></span>
       <button id="shopClose">닫기</button>
+    </div>
+    <div class="ssec">
+      <h3>포탑 <small>길 옆에 세워져 함께 적을 공격 · 같은 레벨 2개 = 상위 등급</small></h3>
+      <button id="buyTurret" class="buy tur"></button>
+      <div class="pots" style="margin-top:6px">
+        <button id="mergeTurret" class="buy merge"></button>
+        <button id="sellTurret" class="buy"></button>
+      </div>
+      <div class="tlist" id="turList"></div>
+      <div class="thint">화면의 포탑을 탭 → 같은 레벨의 다른 포탑을 탭하면 합체됩니다.</div>
     </div>
     <div class="ssec">
       <h3>무기 <small id="weaponCur"></small></h3>
@@ -166,6 +183,23 @@ const CFG = {
   eHpGeo:1.075, eDmgGeo:1.04, eSpdCap:2.4,      // 후반 기하급수 성장(HP/공격력) + 속도 상한
   spawnBase:1.05, spawnFloor:0.22, spawnStep:0.08, // 스폰: 더 촘촘하게
   levelSec:8,
+  // ---- 스테이지 보상(레벨이 높을수록 골드 大) ----
+  goldKillBase:3, goldKillPerLv:1.6, goldKillGeo:1.035,   // 처치 골드 = (base + lv*perLv) * geo^(lv-1)
+  stageBonusBase:12, stageBonusPerLv:8,                    // 새 스테이지 도달 시 보너스 골드
+  // ---- 끝내기 쿨타임 ----
+  stopCooldown:60,
+  // ---- 포탑 ----
+  turretSlots:14, turretCost0:110, turretCostMul:1.32, turretSellFrac:0.5,
+  turretTiers:[
+    {n:'목재 포탑',  dmg:16,  range:210, fire:0.85, col:'#a9743a', top:'#d0964e'},
+    {n:'석재 포탑',  dmg:34,  range:230, fire:0.78, col:'#8d949f', top:'#b8bfc9'},
+    {n:'강철 포탑',  dmg:72,  range:255, fire:0.70, col:'#6d7f96', top:'#9bb2cc'},
+    {n:'마법 포탑',  dmg:150, range:280, fire:0.62, col:'#6d4bb0', top:'#a98bff', splash:42},
+    {n:'화염 포탑',  dmg:310, range:300, fire:0.55, col:'#b8461c', top:'#ff8a3a', splash:58, burn:3},
+    {n:'번개 포탑',  dmg:640, range:335, fire:0.46, col:'#2a6fa8', top:'#7fd4ff', splash:74, slow:3},
+    {n:'용의 포탑',  dmg:1300,range:380, fire:0.38, col:'#7a1030', top:'#ff3b6b', splash:96, burn:4, slow:3},
+  ],
+  turretSplashFrac:0.5,
   // ---- 보스 (스테이지 5마다) ----
   bossEvery:5, bossHpMult:12, bossDmgMult:2.6, bossSpeedMult:0.72, bossRMult:2.4, bossReward:60, bossGoldBase:90,
   // ---- 상점 ----
@@ -202,6 +236,44 @@ const PATH = [[0.06,0.53],[0.34,0.53],[0.34,0.31],[0.66,0.31],[0.66,0.53],
               [0.42,0.53],[0.42,0.72],[0.60,0.72],[0.60,0.53],[0.50,0.53]];
 const WP = PATH.map(([fx,fy])=>({x:fx*WORLD.w, y:fy*WORLD.h}));
 function baseNode(){ return WP[WP.length-1]; }
+
+// ---- 포탑 자리 : 길을 따라 좌/우로 번갈아 배치 ----
+function distToPath(x,y){
+  let best=1e9;
+  for(let i=0;i<WP.length-1;i++){
+    const a=WP[i], b=WP[i+1], dx=b.x-a.x, dy=b.y-a.y, L2=dx*dx+dy*dy||1;
+    let u=((x-a.x)*dx+(y-a.y)*dy)/L2; u=Math.max(0,Math.min(1,u));
+    const d=Math.hypot(x-(a.x+dx*u), y-(a.y+dy*u));
+    if(d<best) best=d;
+  }
+  return best;
+}
+function buildTurretSlots(){
+  const OFF=52, segs=[]; let total=0;
+  for(let i=0;i<WP.length-1;i++){
+    const a=WP[i], b=WP[i+1], L=Math.hypot(b.x-a.x,b.y-a.y);
+    segs.push({a,b,L,s:total}); total+=L;
+  }
+  const N=CFG.turretSlots, out=[];
+  for(let i=0;i<N;i++){
+    const t=(i+0.5)/N*total;
+    const sg=segs.find(s=>t>=s.s && t<=s.s+s.L) || segs[segs.length-1];
+    const u=(t-sg.s)/sg.L;
+    const px=sg.a.x+(sg.b.x-sg.a.x)*u, py=sg.a.y+(sg.b.y-sg.a.y)*u;
+    const ux=(sg.b.x-sg.a.x)/sg.L, uy=(sg.b.y-sg.a.y)/sg.L;
+    let bestP=null, bestD=-1;
+    for(const side of [(i%2)?1:-1, (i%2)?-1:1]){          // 선호 방향 → 반대 방향 순으로 시도
+      const x=Math.max(46,Math.min(WORLD.w-46, px-uy*OFF*side));
+      const y=Math.max(46,Math.min(WORLD.h-46, py+ux*OFF*side));
+      const d=distToPath(x,y);
+      if(d>bestD){ bestD=d; bestP={x,y}; }
+      if(d>=40) break;                                     // 길에서 충분히 떨어졌으면 확정
+    }
+    out.push(bestP);
+  }
+  return out;
+}
+const TSLOTS = buildTurretSlots();
 
 // ---- 아이소메트릭 카메라 ----
 const ISO_X=0.866, ISO_Y=0.5, Z_HEAD=110;
@@ -347,6 +419,17 @@ function buildGround(){
   const s0=WP[0];
   g.fillStyle='rgba(255,90,106,.45)';
   g.beginPath(); g.ellipse(isoX(s0.x,s0.y),isoY(s0.x,s0.y,1), 38*ISO_X*1.42*CAM.scale, 38*ISO_Y*1.42*CAM.scale,0,0,7); g.fill();
+
+  // 포탑 자리 표시
+  g.lineWidth=Math.max(1,2*CAM.scale); g.setLineDash([5*CAM.scale,5*CAM.scale]);
+  for(const s of TSLOTS){
+    const rx=20*ISO_X*1.42*CAM.scale, ry=20*ISO_Y*1.42*CAM.scale;
+    g.fillStyle='rgba(167,139,250,.30)';
+    g.beginPath(); g.ellipse(isoX(s.x,s.y),isoY(s.x,s.y,0.8), rx, ry,0,0,7); g.fill();
+    g.strokeStyle='rgba(200,180,255,.85)';
+    g.beginPath(); g.ellipse(isoX(s.x,s.y),isoY(s.x,s.y,0.8), rx, ry,0,0,7); g.stroke();
+  }
+  g.setLineDash([]);
 }
 
 function resize(){
@@ -364,6 +447,7 @@ const G = {
   upTotal:0, upToward:0, spawnTimer:0, nextBossLevel:5, levelOffset:0,
   weaponTier:0, armorTier:0, shopOpen:false, potionField:[], buffs:{rageT:0,luckT:0,guardT:0},
   allies:[], enemies:[], shots:[], fx:[], nums:[],
+  turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1,
 };
 
 // ---- 기록(하이스코어) : localStorage 영속 ----
@@ -383,6 +467,10 @@ function enemyStats(){
            r:CFG.eR0+Math.min(8,L*0.4) };
 }
 function spawnInterval(){ return Math.max(CFG.spawnFloor, CFG.spawnBase-(G.level-1)*CFG.spawnStep); }
+// 스테이지가 높을수록 처치 골드가 크게 증가
+function killGold(){
+  return Math.round((CFG.goldKillBase+CFG.goldKillPerLv*G.level)*Math.pow(CFG.goldKillGeo,G.level-1));
+}
 function upgradeCost(){ return Math.round(CFG.cost0*Math.pow(CFG.costMul,G.upTotal)); }
 function allyStat(){
   return { maxHp:CFG.hp0+G.upTotal*CFG.dHp, dmg:CFG.dmg0+G.upTotal*CFG.dDmg,
@@ -416,9 +504,55 @@ function reset(){
   G.upTotal=0; G.upToward=0; G.spawnTimer=0; G.nextBossLevel=CFG.bossEvery; G.phase='idle';
   G.weaponTier=0; G.armorTier=0; G.shopOpen=false; G.potionField.length=0;
   G.levelOffset=0; G.buffs.rageT=0; G.buffs.luckT=0; G.buffs.guardT=0;
+  G.turrets=[]; G.turretsBought=0; G.selTurret=null; G.stopCd=0; G.maxLevelSeen=1;
   G.allies=[]; for(let i=0;i<CFG.allyStart;i++) G.allies.push(newAlly());
   layoutAllies();
 }
+// ---- 포탑 ----
+function turretCost(){ return Math.round(CFG.turretCost0*Math.pow(CFG.turretCostMul,G.turretsBought)); }
+function freeSlot(){
+  for(let i=0;i<TSLOTS.length;i++){ if(!G.turrets.some(t=>t.slot===i)) return i; }
+  return -1;
+}
+function buyTurret(){
+  if(G.phase==='over') return;
+  const cost=turretCost(), slot=freeSlot();
+  if(slot<0){ floatText(baseNode().x,baseNode().y,'포탑 자리가 가득 찼습니다','#ff8a97'); return; }
+  if(G.gold<cost) return;
+  G.gold-=cost; G.turretsBought++;
+  const s=TSLOTS[slot];
+  G.turrets.push({slot, tier:0, x:s.x, y:s.y, cd:Math.random()*0.4, shootFlash:0});
+  floatText(s.x,s.y,'🏰 '+CFG.turretTiers[0].n+' 건설!','#8ad3ff');
+  updateShop();
+}
+function mergeTurrets(src,dst){
+  if(!src||!dst||src===dst||src.tier!==dst.tier) return false;
+  if(dst.tier>=CFG.turretTiers.length-1) return false;
+  dst.tier++; dst.cd=0;
+  G.turrets=G.turrets.filter(t=>t!==src);
+  G.selTurret=null;
+  floatText(dst.x,dst.y,'✨ '+CFG.turretTiers[dst.tier].n+' Lv'+(dst.tier+1)+'!','#ffd166');
+  burst(dst.x,dst.y,'#ffd166',16);
+  return true;
+}
+function autoMerge(){                                   // 가능한 쌍 중 가장 높은 등급끼리 합체
+  const max=CFG.turretTiers.length-1;
+  for(let tier=max-1; tier>=0; tier--){
+    const list=G.turrets.filter(t=>t.tier===tier);
+    if(list.length>=2) return mergeTurrets(list[0],list[1]);
+  }
+  floatText(baseNode().x,baseNode().y,'합체할 같은 레벨 포탑이 없습니다','#ff8a97');
+  return false;
+}
+function sellTurret(){
+  const t=G.selTurret || G.turrets[G.turrets.length-1];
+  if(!t) return;
+  const refund=Math.round(CFG.turretCost0*Math.pow(2,t.tier)*CFG.turretSellFrac);
+  G.gold+=refund; G.turrets=G.turrets.filter(x=>x!==t); G.selTurret=null;
+  floatText(t.x,t.y,'포탑 판매 💰+'+refund,'#ffd166');
+  updateShop();
+}
+
 function spawnEnemy(){
   const s=enemyStats(), st=WP[0];
   const e={x:st.x,y:st.y,hp:s.hp,maxHp:s.hp,speed:s.speed,dmg:s.dmg,r:s.r,
@@ -446,6 +580,12 @@ function nearestEnemy(x,y,range){
   for(const e of G.enemies){ const d=(e.x-x)**2+(e.y-y)**2; if(d<bd){bd=d;best=e;} }
   return best;
 }
+function hitEnemy(e,dmg,p,direct){
+  e.hp-=dmg; e.flash=.12;
+  if(p){ if(p.burn) e.burnT=Math.max(e.burnT,p.burn); if(p.slow) e.slowT=Math.max(e.slowT,p.slow); }
+  if(direct){ damageNum(e.x,e.y,dmg,'#ffe08a'); burst(e.x,e.y,(p&&p.col)||'#ffd166',4); }
+  if(e.hp<=0) e.dead=true;
+}
 function damageNum(x,y,v,c){ G.nums.push({x,y,val:Math.round(v),color:c,t:0,rise:0}); }
 function floatText(x,y,txt,c){ G.nums.push({x,y,txt,color:c,t:0,rise:0,big:true}); }
 function burst(x,y,c,n){
@@ -462,6 +602,14 @@ function frame(ts){ const dt=Math.min(.05,(ts-last)/1000||0); last=ts; update(dt
 function update(dt){
   if(G.phase==='running' && !G.shopOpen){
     G.time+=dt; G.level=Math.max(1, levelFor(G.time)-G.levelOffset);   // 환각인형 = 난이도 감소
+    if(G.stopCd>0) G.stopCd=Math.max(0,G.stopCd-dt);                   // 끝내기 쿨타임(게임 진행 중에만 감소)
+    while(G.level>G.maxLevelSeen){                                     // 새 스테이지 도달 = 보너스 골드
+      G.maxLevelSeen++;
+      const bonus=Math.round(CFG.stageBonusBase+CFG.stageBonusPerLv*G.maxLevelSeen)
+                  *(G.buffs.luckT>0?CFG.luckMult:1);
+      G.gold+=bonus;
+      const b=baseNode(); floatText(b.x,b.y,'스테이지 '+G.maxLevelSeen+' 💰+'+bonus,'#ffd166');
+    }
     while(G.level>=G.nextBossLevel){ spawnBoss(); G.nextBossLevel+=CFG.bossEvery; }  // 5스테이지마다 보스
     G.spawnTimer-=dt; if(G.spawnTimer<=0){ spawnEnemy(); G.spawnTimer=spawnInterval(); }
     if(G.potionField.length){ for(const f of G.potionField) f.t-=dt; G.potionField=G.potionField.filter(f=>f.t>0); }
@@ -474,15 +622,29 @@ function update(dt){
     if(a.dead) continue; a.cd-=dt; if(a.shootFlash>0) a.shootFlash-=dt;
     if(a.cd<=0){ const t=nearestEnemy(a.x,a.y,a.range);
       if(t){ a.cd=a.fire*(rage?CFG.rageFire:1); a.shootFlash=0.08;
-        G.shots.push({x:a.x,y:a.y,target:t,dmg:a.dmg*(rage?CFG.rageDmg:1),speed:540}); } }
+        G.shots.push({x:a.x,y:a.y,target:t,dmg:a.dmg*(rage?CFG.rageDmg:1),speed:540,col:'#ffd166'}); } }
+  }
+  if(active) for(const t of G.turrets){          // 포탑도 함께 사격
+    const T=CFG.turretTiers[t.tier];
+    t.cd-=dt; if(t.shootFlash>0) t.shootFlash-=dt;
+    if(t.cd<=0){ const e=nearestEnemy(t.x,t.y,T.range);
+      if(e){ t.cd=T.fire*(rage?CFG.rageFire:1); t.shootFlash=0.1;
+        G.shots.push({x:t.x,y:t.y,target:e,dmg:T.dmg*(rage?CFG.rageDmg:1),speed:640,
+                      col:T.top,splash:T.splash||0,burn:T.burn||0,slow:T.slow||0}); } }
   }
   if(active){
     for(const p of G.shots){
       if(!p.target||p.target.hp<=0){ p.dead=true; continue; }
       const dx=p.target.x-p.x, dy=p.target.y-p.y, d=Math.hypot(dx,dy)||1, step=p.speed*dt;
-      if(d<=step+p.target.r){ p.target.hp-=p.dmg; p.target.flash=.12; p.dead=true;
-        damageNum(p.target.x,p.target.y,p.dmg,'#ffe08a'); burst(p.target.x,p.target.y,'#ffd166',4);
-        if(p.target.hp<=0) p.target.dead=true;
+      if(d<=step+p.target.r){
+        p.dead=true;
+        const cx=p.target.x, cy=p.target.y;
+        hitEnemy(p.target,p.dmg,p,true);
+        if(p.splash>0){ const r2=p.splash*p.splash;
+          for(const e of G.enemies){ if(e===p.target||e.dead) continue;
+            if((e.x-cx)**2+(e.y-cy)**2<=r2) hitEnemy(e,p.dmg*CFG.turretSplashFrac,p,false); }
+          burst(cx,cy,p.col||'#ffd166',8);
+        }
       } else { p.x+=dx/d*step; p.y+=dy/d*step; }
     }
     G.shots=G.shots.filter(p=>!p.dead);
@@ -518,8 +680,8 @@ function update(dt){
     }
   }
   if(active){
-    const luck=G.buffs.luckT>0?CFG.luckMult:1;
-    for(const e of G.enemies){ if(e.dead){ G.kills++; G.gold+=(2+G.level)*luck;
+    const luck=G.buffs.luckT>0?CFG.luckMult:1, kg=killGold();
+    for(const e of G.enemies){ if(e.dead){ G.kills++; G.gold+=kg*luck;
       burst(e.x,e.y, e.isBoss?'#ff3b6b':'#ff5a6a', e.isBoss?28:10);
       if(e.isBoss) dropBossReward(e); } }   // 보스: 대량 골드 + 랜덤 아이템(강할수록 좋음)
     G.enemies=G.enemies.filter(e=>!e.dead);
@@ -541,6 +703,7 @@ function draw(){
 
   // 깊이 정렬(painter's algorithm)
   const items=[];
+  for(const t of G.turrets) items.push({d:depthOf(t.x,t.y), k:'t', o:t});
   for(const a of G.allies) items.push({d:depthOf(a.x,a.y), k:'a', o:a});
   for(const e of G.enemies) items.push({d:depthOf(e.x,e.y), k:'e', o:e});
   for(const p of G.shots)  items.push({d:depthOf(p.x,p.y), k:'p', o:p});
@@ -549,7 +712,9 @@ function draw(){
 
   for(const it of items){
     const o=it.o;
-    if(it.k==='a'){
+    if(it.k==='t'){
+      drawTurret(ctx,o);
+    } else if(it.k==='a'){
       if(o.dead){ // 쓰러진 아군 = 납작한 회색 블록
         box(ctx,o.x,o.y,0,22,14,5,'#5b6478');
       } else {
@@ -568,7 +733,7 @@ function draw(){
       const top=character(ctx,o.x,o.y,s,skin,torso,leg,o.phase,o.freezeT<=0);
       if(o.isBoss||o.hp<o.maxHp) hpBar(o.x,o.y,top+8,o.hp/o.maxHp, o.isBoss?'#ff3b6b':'#ff8a97');
     } else if(it.k==='p'){
-      box(ctx,o.x,o.y,30,7,7,7,'#ffd166');
+      box(ctx,o.x,o.y,30,7,7,7,o.col||'#ffd166');
     } else {
       const al=1-o.t/o.life;
       ctx.globalAlpha=Math.max(0,al);
@@ -589,10 +754,27 @@ function draw(){
   ctx.globalAlpha=1;
 
   if(G.phase==='idle'){ banner('“시작”을 누르면 적이 길을 따라 몰려옵니다','rgba(232,236,246,.95)');
+    subline('상점에서 포탑을 세우고 · 같은 레벨 포탑 2개를 탭하면 합체!','#c8b4ff',52);
     if(RECORDS.bestTime>0){ ctx.textAlign='center'; ctx.font='bold 14px Segoe UI'; ctx.lineWidth=4; ctx.strokeStyle='rgba(0,0,0,.6)';
       const s='🏆 최고 기록  '+RECORDS.bestTime.toFixed(0)+'초 · '+RECORDS.bestKills+'킬 · Lv'+RECORDS.bestLevel;
-      ctx.strokeText(s,W/2,54); ctx.fillStyle='#ffd166'; ctx.fillText(s,W/2,54); } }
-  if(G.phase==='paused'){ banner('정비 중 — 골드로 강화하고 “시작”으로 재개','#ffd166'); }
+      ctx.strokeText(s,W/2,74); ctx.fillStyle='#ffd166'; ctx.fillText(s,W/2,74); } }
+  if(G.phase==='paused'){ banner('정비 중 — 골드로 강화하고 “시작”으로 재개','#ffd166');
+    if(G.stopCd>0) subline('끝내기 쿨타임 '+Math.ceil(G.stopCd)+'초 (게임 진행 중 감소)','#ff8a97',52); }
+}
+// ---- 포탑 그리기 (블록 타워 + 레벨 표시) ----
+function drawTurret(g,t){
+  const T=CFG.turretTiers[t.tier], sel=(G.selTurret===t), h=16+t.tier*4;
+  if(sel){                                    // 선택 표시 링
+    g.strokeStyle='#ffd166'; g.lineWidth=Math.max(1,2.5*CAM.scale);
+    g.beginPath(); g.ellipse(isoX(t.x,t.y),isoY(t.x,t.y,1), 26*ISO_X*1.42*CAM.scale, 26*ISO_Y*1.42*CAM.scale,0,0,7); g.stroke();
+  }
+  box(g,t.x,t.y,0,32,32,9,'#6b7280');                                   // 받침
+  box(g,t.x,t.y,9,20,20,h,T.col);                                       // 기둥
+  box(g,t.x,t.y,9+h,26,26,11,t.shootFlash>0?'#ffffff':T.top);           // 포신 헤드
+  const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,9+h+22);                      // 레벨 라벨
+  g.textAlign='center'; g.font='bold '+Math.max(9,11*CAM.scale)+'px Segoe UI';
+  g.lineWidth=3; g.strokeStyle='rgba(0,0,0,.65)';
+  g.strokeText('Lv'+(t.tier+1),sx,sy); g.fillStyle=T.top; g.fillText('Lv'+(t.tier+1),sx,sy);
 }
 function hpBar(x,y,z,frac,col){
   const sx=isoX(x,y), sy=isoY(x,y,z), w=34*CAM.scale, h=5*CAM.scale;
@@ -604,6 +786,11 @@ function banner(txt,col){
   ctx.lineWidth=4; ctx.strokeStyle='rgba(0,0,0,.6)';
   ctx.strokeText(txt,W/2,30); ctx.fillStyle=col; ctx.fillText(txt,W/2,30);
 }
+function subline(txt,col,y){
+  ctx.textAlign='center'; ctx.font='bold 13px Segoe UI';
+  ctx.lineWidth=4; ctx.strokeStyle='rgba(0,0,0,.6)';
+  ctx.strokeText(txt,W/2,y); ctx.fillStyle=col; ctx.fillText(txt,W/2,y);
+}
 
 function updateHUD(){
   document.getElementById('t').textContent=G.time.toFixed(1);
@@ -611,6 +798,7 @@ function updateHUD(){
   document.getElementById('kills').textContent=G.kills;
   document.getElementById('gold').textContent=Math.floor(G.gold);
   document.getElementById('allies').textContent=G.allies.filter(a=>!a.dead).length;
+  document.getElementById('turrets').textContent=G.turrets.length+'/'+TSLOTS.length;
   document.getElementById('uplv').textContent='Lv '+G.upTotal;
   document.getElementById('next').textContent='다음 아군 '+G.upToward+'/'+CFG.perMilestone;
   const bf=[];
@@ -624,7 +812,9 @@ function updateHUD(){
   const startBtn=document.getElementById('start');
   startBtn.textContent=(G.phase==='paused')?'재개':'시작';
   startBtn.disabled=(G.phase==='running');
-  document.getElementById('stop').disabled=(G.phase!=='running');
+  const stopBtn=document.getElementById('stop');
+  stopBtn.textContent=(G.stopCd>0)?('끝내기 '+Math.ceil(G.stopCd)+'초'):'끝내기';
+  stopBtn.disabled=(G.phase!=='running'||G.stopCd>0);
   document.getElementById('shopBtn').disabled=(G.phase==='over');
   if(G.shopOpen) updateShop();
 }
@@ -639,9 +829,12 @@ function doUpgrade(){
 }
 function startGame(){ if(G.phase==='over') reset(); G.phase='running';
   document.getElementById('over').style.display='none'; }
-function stopGame(){ G.phase='paused';
+function stopGame(){
+  if(G.phase!=='running' || G.stopCd>0) return;      // 1분 쿨타임
+  G.phase='paused'; G.stopCd=CFG.stopCooldown;
   for(const e of G.enemies) burst(e.x,e.y,'#ff5a6a',6);
-  G.enemies.length=0; G.shots.length=0; }
+  G.enemies.length=0; G.shots.length=0;
+  const b=baseNode(); floatText(b.x,b.y,'끝내기 사용 · 쿨타임 '+CFG.stopCooldown+'초','#ff8a97'); }
 function endGame(){ G.phase='over';
   const t=G.time, k=G.kills, lv=G.level, up=G.upTotal;
   const isNew = t>RECORDS.bestTime || k>RECORDS.bestKills || lv>RECORDS.bestLevel;
@@ -669,6 +862,27 @@ function openShop(){ if(G.phase==='over') return; G.shopOpen=true;
 function closeShop(){ G.shopOpen=false; document.getElementById('shop').style.display='none'; }
 function updateShop(){
   document.getElementById('shopGold').textContent=Math.floor(G.gold);
+  // 포탑
+  const tc=turretCost(), slot=freeSlot(), bt=document.getElementById('buyTurret');
+  const T0=CFG.turretTiers[0];
+  if(slot<0){ bt.textContent='포탑 자리가 가득 찼습니다 ('+TSLOTS.length+'/'+TSLOTS.length+')'; bt.disabled=true; }
+  else { bt.textContent='▶ '+T0.n+' 건설  (공격 '+T0.dmg+' · 사거리 '+T0.range+')   💰'+tc;
+         bt.disabled=G.gold<tc; }
+  const maxTier=CFG.turretTiers.length-1;
+  let pair=-1;
+  for(let i=maxTier-1;i>=0;i--){ if(G.turrets.filter(t=>t.tier===i).length>=2){ pair=i; break; } }
+  const mb=document.getElementById('mergeTurret');
+  mb.textContent = pair>=0 ? ('⚡ 합체\nLv'+(pair+1)+'×2 → '+CFG.turretTiers[pair+1].n) : '⚡ 합체\n같은 레벨 2개 필요';
+  mb.style.whiteSpace='pre-line'; mb.disabled=(pair<0);
+  const sb=document.getElementById('sellTurret'), st=G.selTurret||G.turrets[G.turrets.length-1];
+  sb.textContent = st ? ('♻ 포탑 판매\n'+CFG.turretTiers[st.tier].n+' 💰+'+Math.round(CFG.turretCost0*Math.pow(2,st.tier)*CFG.turretSellFrac))
+                      : '♻ 포탑 판매\n보유 포탑 없음';
+  sb.style.whiteSpace='pre-line'; sb.disabled=!st;
+  const counts=new Array(CFG.turretTiers.length).fill(0);
+  for(const t of G.turrets) counts[t.tier]++;
+  document.getElementById('turList').innerHTML = G.turrets.length
+    ? counts.map((c,i)=>c?'<span class="tchip">Lv'+(i+1)+' '+CFG.turretTiers[i].n+' <b>×'+c+'</b></span>':'').join('')
+    : '<span class="tchip">보유 포탑 없음</span>';
   const wc=CFG.weapons[G.weaponTier], wn=CFG.weapons[G.weaponTier+1];
   document.getElementById('weaponCur').textContent='· 현재 '+wc.n+' (공격 +'+wc.dmg+')';
   const bw=document.getElementById('buyWeapon');
@@ -764,9 +978,31 @@ function dropBossReward(e){
   for(let i=0;i<rolls;i++){ const r=rollReward(cT); r.apply(); floatText(px,py-42-i*22,'🎁 '+r.label,'#8ad3ff'); }
 }
 
+// ---- 화면 탭으로 포탑 선택/합체 ----
+cv.addEventListener('pointerdown', ev=>{
+  if(G.shopOpen||G.phase==='over') return;
+  const r=cv.getBoundingClientRect(), mx=ev.clientX-r.left, my=ev.clientY-r.top;
+  let hit=null, bd=46*46;
+  for(const t of G.turrets){
+    const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,26+t.tier*4);
+    const d=(sx-mx)**2+(sy-my)**2; if(d<bd){ bd=d; hit=t; }
+  }
+  if(!hit){ G.selTurret=null; return; }
+  if(!G.selTurret || G.selTurret===hit){ G.selTurret=(G.selTurret===hit)?null:hit; return; }
+  if(G.selTurret.tier===hit.tier){
+    if(!mergeTurrets(G.selTurret,hit)){                      // 최고 등급은 합체 불가
+      floatText(hit.x,hit.y,'최고 등급은 합체할 수 없습니다','#ff8a97'); G.selTurret=null; }
+  } else {
+    floatText(hit.x,hit.y,'같은 레벨끼리만 합체됩니다','#ff8a97'); G.selTurret=hit;
+  }
+});
+
 document.getElementById('rotBtn').onclick=rotateView;
 document.getElementById('shopBtn').onclick=openShop;
 document.getElementById('shopClose').onclick=closeShop;
+document.getElementById('buyTurret').onclick=buyTurret;
+document.getElementById('mergeTurret').onclick=()=>{ autoMerge(); updateShop(); };
+document.getElementById('sellTurret').onclick=sellTurret;
 document.getElementById('buyWeapon').onclick=buyWeapon;
 document.getElementById('buyArmor').onclick=buyArmor;
 for(const p of CFG.potions){ document.getElementById('buyPot_'+p.key).onclick=()=>buyPotion(p.key); }
