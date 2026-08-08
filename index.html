@@ -183,8 +183,9 @@ const CFG = {
   goldStart:10, cost0:15, costMul:1.28,
   eHp0:38, eSpd0:54, eDmg0:9, eR0:13,          // 적 기본 스탯 (상향)
   eHpScale:0.50, eSpdScale:0.06, eDmgScale:0.30, // 레벨당 선형 증가폭
-  eHpGeo:1.075, eDmgGeo:1.04, eSpdCap:2.4,      // 후반 기하급수 성장(HP/공격력) + 속도 상한
+  eHpGeo:1.05, eDmgGeo:1.04, eSpdCap:2.4,       // 후반 기하급수 성장(HP/공격력) + 속도 상한
   spawnBase:1.05, spawnFloor:0.22, spawnStep:0.08, // 스폰: 더 촘촘하게
+  enemyMax:60,                                  // 동시 생존 적 수 상한(넘으면 스폰 멈춤 → 렉/메모리 폭주 방지)
   levelSec:8,
   // ---- 스테이지 보상(레벨이 높을수록 골드 大) ----
   goldKillBase:4, goldKillPerLv:3, goldKillGeo:1.06,       // 처치 골드 = (base + lv*perLv) * geo^(lv-1)
@@ -331,9 +332,11 @@ function rotateView(){
 // ---- 색 셰이딩 (면별 밝기) ----
 const _sc=new Map();
 function shade(hex,f){
-  const k=hex+'|'+f; let v=_sc.get(k); if(v) return v;
-  const n=parseInt(hex.slice(1),16);
-  const r=Math.min(255,((n>>16)&255)*f)|0, g=Math.min(255,((n>>8)&255)*f)|0, b=Math.min(255,(n&255)*f)|0;
+  // 회전 박스는 각도가 연속이라 f가 매번 다른 실수 → 32단계로 양자화해야 캐시가 무한히 늘지 않는다
+  const q=Math.round(f*32);
+  const k=hex+'|'+q; let v=_sc.get(k); if(v) return v;
+  const ff=q/32, n=parseInt(hex.slice(1),16);
+  const r=Math.min(255,((n>>16)&255)*ff)|0, g=Math.min(255,((n>>8)&255)*ff)|0, b=Math.min(255,(n&255)*ff)|0;
   v='rgb('+r+','+g+','+b+')'; _sc.set(k,v); return v;
 }
 // 박스 = 윗면 + 보이는 옆면 (회전 대응: 네 옆면을 먼->가까운 순으로 그려 뒷면을 덮음)
@@ -413,7 +416,9 @@ const ENEMY_SKIN='#c9705f', ENEMY_TORSO='#8b1a2b', ENEMY_LEG='#341018',
       ENEMY_HAIR='#2a0d14', ENEMY_SHOE='#1a0509', ENEMY_BELT='#6b1020';
 const EYE_COL='#141a24';
 // 사람 1명 그리기. 로컬 좌표 : +x=앞(바라보는 방향), +y=왼쪽, z=위
-function character(g,x,y,s,C,phase,moving,face,pose){
+// lod = 디테일 단계 (0=전체, 1=얼굴/손 생략, 2=최소) — 적이 많을 때 자동으로 올려 프레임 유지
+function character(g,x,y,s,C,phase,moving,face,pose,lod){
+  lod=lod||0;
   const anim = moving && !REDUCE;
   const sw   = anim ? Math.sin(phase) : 0;                 // 팔다리 스윙
   const bob  = anim ? Math.abs(Math.sin(phase))*1.3*s : 0; // 상하 흔들림
@@ -428,28 +433,34 @@ function character(g,x,y,s,C,phase,moving,face,pose){
   // 다리 + 신발
   add( legSw, 4.2, 3.5, 6.5, 6.5, 16, C.leg);
   add(-legSw,-4.2, 3.5, 6.5, 6.5, 16, C.leg);
-  add( legSw+1.0, 4.2, 0, 9.5, 6.8, 3.5, C.shoe);          // 발(앞쪽으로 조금 김)
-  add(-legSw+1.0,-4.2, 0, 9.5, 6.8, 3.5, C.shoe);
+  if(lod<2){
+    add( legSw+1.0, 4.2, 0, 9.5, 6.8, 3.5, C.shoe);        // 발(앞쪽으로 조금 김)
+    add(-legSw+1.0,-4.2, 0, 9.5, 6.8, 3.5, C.shoe);
+  }
   // 골반·몸통·어깨(위로 갈수록 넓어져 사람 실루엣)
-  add(0,0,19.5+bob, 8.5, 14.5, 3.5, C.belt);               // 벨트
+  if(lod<2) add(0,0,19.5+bob, 8.5, 14.5, 3.5, C.belt);     // 벨트
   add(0,0,23+bob,   8.0, 15.5, 12, C.torso);               // 몸통(허리~가슴)
   add(0,0,35+bob,   8.8, 19.0, 5.5, C.torso);              // 어깨(더 넓게)
-  add(0,0,40.5+bob, 4.5, 5.0, 2.5, C.skin);                // 목
+  if(lod<1) add(0,0,40.5+bob, 4.5, 5.0, 2.5, C.skin);      // 목
   // 팔 + 손 (공격 자세면 앞으로 들어올림)
   const armF = atk?5.5:0, armZ = atk?26:21.5, sleeve=darken(C.torso,0.78);
   add(armF+armSw, 10.8, armZ+bob, 6, 6, 14, sleeve);       // 왼팔(소매)
   add(armF-armSw,-10.8, armZ+bob, 6, 6, 14, sleeve);       // 오른팔
-  add(armF+armSw, 10.8, armZ-3.5+bob, 6, 6, 4, C.skin);    // 왼손
-  add(armF-armSw,-10.8, armZ-3.5+bob, 6, 6, 4, C.skin);    // 오른손
+  if(lod<1){
+    add(armF+armSw, 10.8, armZ-3.5+bob, 6, 6, 4, C.skin);  // 왼손
+    add(armF-armSw,-10.8, armZ-3.5+bob, 6, 6, 4, C.skin);  // 오른손
+  }
   // 머리 + 머리카락 + 눈 + 코
   add(0,0,43+bob, 10.5, 11.5, 11, C.skin);                 // 머리
   add(0,0,53+bob, 11.2, 12.2, 3.2, C.hair);                // 머리카락(윗면)
-  add(-4.6,0,45.5+bob, 2.5, 11.8, 8.5, C.hair);            // 뒷머리
-  add(6.4,2.9,48.8+bob, 3.0, 2.9, 2.4, EYE_COL);           // 왼눈(얼굴 밖으로 충분히 돌출)
-  add(6.4,-2.9,48.8+bob, 3.0, 2.9, 2.4, EYE_COL);          // 오른눈
-  add(6.6,0,44.8+bob, 3.0, 2.8, 2.6, C.skin);              // 코
-  add(6.2,0,42.8+bob, 2.2, 5.0, 1.4, darken(C.skin,0.62)); // 입
-  if(C.horn){                                              // 적 = 투구 뿔
+  if(lod<1){
+    add(-4.6,0,45.5+bob, 2.5, 11.8, 8.5, C.hair);          // 뒷머리
+    add(6.4,2.9,48.8+bob, 3.0, 2.9, 2.4, EYE_COL);         // 왼눈(얼굴 밖으로 충분히 돌출)
+    add(6.4,-2.9,48.8+bob, 3.0, 2.9, 2.4, EYE_COL);        // 오른눈
+    add(6.6,0,44.8+bob, 3.0, 2.8, 2.6, C.skin);            // 코
+    add(6.2,0,42.8+bob, 2.2, 5.0, 1.4, darken(C.skin,0.62)); // 입
+  }
+  if(C.horn && lod<2){                                     // 적 = 투구 뿔
     add(1.5, 6.2, 55.5+bob, 2.6, 2.6, 4.5, C.horn);
     add(1.5,-6.2, 55.5+bob, 2.6, 2.6, 4.5, C.horn);
   }
@@ -733,10 +744,14 @@ function hitEnemy(e,dmg,p,direct){
   if(direct){ damageNum(e.x,e.y,dmg,'#ffe08a'); burst(e.x,e.y,(p&&p.col)||'#ffd166',4); }
   if(e.hp<=0) e.dead=true;
 }
-function damageNum(x,y,v,c){ G.nums.push({x,y,val:Math.round(v),color:c,t:0,rise:0}); }
+function damageNum(x,y,v,c){
+  if(G.nums.length>60) return;                 // 적이 많을 때 숫자 폭주 방지
+  G.nums.push({x,y,val:Math.round(v),color:c,t:0,rise:0}); }
 function floatText(x,y,txt,c){ G.nums.push({x,y,txt,color:c,t:0,rise:0,big:true}); }
 function burst(x,y,c,n){
   if(REDUCE) n=Math.ceil(n*0.3);
+  if(G.enemies.length>30) n=Math.ceil(n*0.35);           // 적이 많으면 파티클 줄임
+  if(G.fx.length>260) return;                            // 파티클 총량 상한
   for(let i=0;i<n;i++){ const a=Math.random()*7, sp=40+Math.random()*150;
     G.fx.push({x,y,z:16+Math.random()*14,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,
                vz:70+Math.random()*130,life:.55+Math.random()*.3,t:0,color:c}); }
@@ -759,7 +774,8 @@ function update(dt){
       const b=baseNode(); floatText(b.x,b.y,'스테이지 '+G.maxLevelSeen+' 💰+'+bonus,'#ffd166');
     }
     while(G.level>=G.nextBossLevel){ spawnBoss(); G.nextBossLevel+=CFG.bossEvery; }  // 5스테이지마다 보스
-    G.spawnTimer-=dt; if(G.spawnTimer<=0){ spawnEnemy(); G.spawnTimer=spawnInterval(); }
+    G.spawnTimer-=dt;                                   // 적이 상한만큼 쌓였으면 잠시 스폰 중단
+    if(G.spawnTimer<=0){ if(G.enemies.length<CFG.enemyMax) spawnEnemy(); G.spawnTimer=spawnInterval(); }
     if(G.potionField.length){ for(const f of G.potionField) f.t-=dt; G.potionField=G.potionField.filter(f=>f.t>0); }
     for(const k in G.buffs){ if(G.buffs[k]>0) G.buffs[k]-=dt; }        // 인형 버프 타이머
   }
@@ -884,6 +900,9 @@ function draw(){
     else if(d.land) ring(d.land.x, d.land.y, t.tier);
   }
 
+  // 적이 많으면 캐릭터 디테일을 낮춰 프레임 유지 (보스는 항상 선명하게)
+  const EN=G.enemies.length, LOD = EN>45 ? 2 : EN>22 ? 1 : 0;
+
   // 깊이 정렬(painter's algorithm)
   const items=[];
   for(const t of G.turrets) items.push({d:depthOf(t.x,t.y), k:'t', o:t});
@@ -903,7 +922,7 @@ function draw(){
       } else {
         const C=Object.assign({},ALLY_C);
         if(o.shootFlash>0) C.torso='#63b8ff';
-        const top=character(ctx,o.x,o.y,1.05,C,o.phase,false,o.face||0,o.shootFlash>0?1:0);
+        const top=character(ctx,o.x,o.y,1.05,C,o.phase,false,o.face||0,o.shootFlash>0?1:0,LOD);
         hpBar(o.x,o.y,top+10,o.hp/o.maxHp,'#38e8b0');
       }
     } else if(it.k==='e'){
@@ -915,7 +934,7 @@ function draw(){
       else if(o.poisonT>0){ C.torso='#6fbf3a'; C.skin='#a7e07a'; }                   // 독
       else if(o.slowT>0){ C.torso=o.isBoss?'#9b3fb0':'#7b6fd0'; }                    // 감속
       else if(o.weakT>0){ C.torso='#6b7280'; }                                       // 약화
-      const top=character(ctx,o.x,o.y,s,C,o.phase,o.freezeT<=0,o.face||0,o.atkPose>0?1:0);
+      const top=character(ctx,o.x,o.y,s,C,o.phase,o.freezeT<=0,o.face||0,o.atkPose>0?1:0,o.isBoss?0:LOD);
       if(o.isBoss||o.hp<o.maxHp) hpBar(o.x,o.y,top+8,o.hp/o.maxHp, o.isBoss?'#ff3b6b':'#ff8a97');
     } else if(it.k==='p'){
       const ps=o.size||7;
