@@ -121,13 +121,14 @@
       <button id="shopClose">닫기</button>
     </div>
     <div class="ssec">
-      <h3>포탑 <small>길 옆에 세워져 함께 적을 공격 · 같은 레벨 2개 = 상위 등급</small></h3>
-      <button id="buyTurret" class="buy tur"></button>
+      <h3>포탑 <small>길 옆에 세워져 함께 적을 공격 · 같은 레벨 2개 합체 = 상위 등급</small></h3>
+      <div class="pots" id="turBuyGrid"></div>
       <div class="pots" style="margin-top:6px">
         <button id="mergeTurret" class="buy merge"></button>
         <button id="sellTurret" class="buy"></button>
       </div>
       <div class="tlist" id="turList"></div>
+      <div class="thint" id="turSlotInfo"></div>
       <div class="thint">화면의 포탑을 탭 → 같은 레벨의 다른 포탑을 탭하면 합체됩니다.</div>
     </div>
     <div class="ssec">
@@ -189,15 +190,25 @@ const CFG = {
   // ---- 끝내기 쿨타임 ----
   stopCooldown:60,
   // ---- 포탑 ----
-  turretSlots:14, turretCost0:110, turretCostMul:1.32, turretSellFrac:0.5,
+  // turretCostMul = 구매할수록 오르는 폭(완만하게) / turretTierCostMul = 등급당 가격 배수
+  // → 합체가 항상 더 싸고, 상위 등급 직접 구매는 "비싼 지름길"이 되도록 맞춤
+  turretSlots:14, turretCost0:110, turretCostMul:1.06, turretSellFrac:0.5, turretTierCostMul:3.2,
+  // style = 등급별 외형 / base·body·hh = 크기 / bl·bw·bn = 총열 길이·굵기·개수
   turretTiers:[
-    {n:'목재 포탑',  dmg:16,  range:210, fire:0.85, col:'#a9743a', top:'#d0964e'},
-    {n:'석재 포탑',  dmg:34,  range:230, fire:0.78, col:'#8d949f', top:'#b8bfc9'},
-    {n:'강철 포탑',  dmg:72,  range:255, fire:0.70, col:'#6d7f96', top:'#9bb2cc'},
-    {n:'마법 포탑',  dmg:150, range:280, fire:0.62, col:'#6d4bb0', top:'#a98bff', splash:42},
-    {n:'화염 포탑',  dmg:310, range:300, fire:0.55, col:'#b8461c', top:'#ff8a3a', splash:58, burn:3},
-    {n:'번개 포탑',  dmg:640, range:335, fire:0.46, col:'#2a6fa8', top:'#7fd4ff', splash:74, slow:3},
-    {n:'용의 포탑',  dmg:1300,range:380, fire:0.38, col:'#7a1030', top:'#ff3b6b', splash:96, burn:4, slow:3},
+    {n:'목재 포탑',  dmg:16,  range:210, fire:0.85, col:'#a9743a', top:'#d0964e', style:'wood',
+     base:30, body:17, hh:15, bl:16, bw:5.0, bn:1},
+    {n:'석재 포탑',  dmg:34,  range:230, fire:0.78, col:'#8d949f', top:'#b8bfc9', style:'stone',
+     base:35, body:20, hh:20, bl:19, bw:6.0, bn:1},
+    {n:'강철 포탑',  dmg:72,  range:255, fire:0.70, col:'#6d7f96', top:'#9bb2cc', style:'steel',
+     base:39, body:22, hh:25, bl:23, bw:5.5, bn:2},
+    {n:'마법 포탑',  dmg:150, range:280, fire:0.62, col:'#6d4bb0', top:'#a98bff', style:'magic',
+     base:43, body:24, hh:30, bl:25, bw:7.0, bn:1, splash:42},
+    {n:'화염 포탑',  dmg:310, range:300, fire:0.55, col:'#b8461c', top:'#ff8a3a', style:'flame',
+     base:47, body:26, hh:35, bl:28, bw:9.0, bn:1, splash:58, burn:3},
+    {n:'번개 포탑',  dmg:640, range:335, fire:0.46, col:'#2a6fa8', top:'#7fd4ff', style:'thunder',
+     base:51, body:28, hh:41, bl:30, bw:6.5, bn:3, splash:74, slow:3},
+    {n:'용의 포탑',  dmg:1300,range:380, fire:0.38, col:'#7a1030', top:'#ff3b6b', style:'dragon',
+     base:56, body:31, hh:48, bl:34, bw:10.0, bn:2, splash:96, burn:4, slow:3},
   ],
   turretSplashFrac:0.5,
   // ---- 보스 (스테이지 5마다) ----
@@ -313,29 +324,63 @@ function shade(hex,f){
 }
 // 박스 = 윗면 + 보이는 옆면 (회전 대응: 네 옆면을 먼->가까운 순으로 그려 뒷면을 덮음)
 const _nX=[0,1,0,-1], _nY=[-1,0,1,0];   // 각 옆면의 외향 법선(월드)
+// 아이소메트릭에서는 옆면 4개 중 2개만 보인다 → 뒷면은 그리지 않는다(그려도 앞면에 완전히 가려짐)
 function box(g,x,y,z,w,d,h,col){
   const hw=w/2, hd=d/2, z1=z+h;
   const bx=[x-hw,x+hw,x+hw,x-hw], by=[y-hd,y-hd,y+hd,y+hd];   // CCW 밑면 코너
-  const faces=[];
-  for(let i=0;i<4;i++){ const j=(i+1)&3;
+  for(let i=0;i<4;i++){
     const rnx=_nX[i]*CAM.cos-_nY[i]*CAM.sin, rny=_nX[i]*CAM.sin+_nY[i]*CAM.cos;  // 회전된 법선
-    const sf=Math.max(.42, .74+.20*rnx-.24*rny);                                 // 방향별 명암
-    faces.push({i,j,sf,d:depthOf((bx[i]+bx[j])/2,(by[i]+by[j])/2)});
-  }
-  faces.sort((a,b)=>a.d-b.d);   // 먼 면 -> 가까운 면
-  for(const f of faces){
-    g.fillStyle=shade(col,f.sf);
+    if(rnx+rny<=0) continue;                                                     // 뒷면 컬링
+    const j=(i+1)&3;
+    g.fillStyle=shade(col,Math.max(.42, .74+.20*rnx-.24*rny));                   // 방향별 명암
     g.beginPath();
-    g.moveTo(isoX(bx[f.i],by[f.i]),isoY(bx[f.i],by[f.i],z));
-    g.lineTo(isoX(bx[f.j],by[f.j]),isoY(bx[f.j],by[f.j],z));
-    g.lineTo(isoX(bx[f.j],by[f.j]),isoY(bx[f.j],by[f.j],z1));
-    g.lineTo(isoX(bx[f.i],by[f.i]),isoY(bx[f.i],by[f.i],z1));
+    g.moveTo(isoX(bx[i],by[i]),isoY(bx[i],by[i],z));
+    g.lineTo(isoX(bx[j],by[j]),isoY(bx[j],by[j],z));
+    g.lineTo(isoX(bx[j],by[j]),isoY(bx[j],by[j],z1));
+    g.lineTo(isoX(bx[i],by[i]),isoY(bx[i],by[i],z1));
     g.closePath(); g.fill();
   }
   g.fillStyle=shade(col,1.15);   // 윗면
   g.beginPath();
   g.moveTo(isoX(bx[0],by[0]),isoY(bx[0],by[0],z1)); g.lineTo(isoX(bx[1],by[1]),isoY(bx[1],by[1],z1));
   g.lineTo(isoX(bx[2],by[2]),isoY(bx[2],by[2],z1)); g.lineTo(isoX(bx[3],by[3]),isoY(bx[3],by[3],z1));
+  g.closePath(); g.fill();
+}
+// 색 밝기 조절 (hex → hex) : 소매/바지 등 같은 계열의 톤 차이를 만들 때
+const _dk=new Map();
+function darken(hex,f){
+  const k=hex+'|'+f; let v=_dk.get(k); if(v) return v;
+  const n=parseInt(hex.slice(1),16);
+  const r=Math.min(255,Math.round(((n>>16)&255)*f)), g=Math.min(255,Math.round(((n>>8)&255)*f)),
+        b=Math.min(255,Math.round((n&255)*f));
+  v='#'+((1<<24)|(r<<16)|(g<<8)|b).toString(16).slice(1); _dk.set(k,v); return v;
+}
+// 회전 박스 : 임의 각도(ang)로 Z축 회전한 직육면체 (총열·사람 몸통 등 방향이 있는 부위용)
+const _cx=[0,0,0,0], _cy=[0,0,0,0];
+function rbox(g,x,y,z,len,wid,h,ang,col){
+  const ca=Math.cos(ang), sa=Math.sin(ang), hl=len/2, hw=wid/2, z1=z+h;
+  _cx[0]=x-hl*ca+hw*sa; _cy[0]=y-hl*sa-hw*ca;   // CCW 밑면 코너 (local -x-y → +x-y → +x+y → -x+y)
+  _cx[1]=x+hl*ca+hw*sa; _cy[1]=y+hl*sa-hw*ca;
+  _cx[2]=x+hl*ca-hw*sa; _cy[2]=y+hl*sa+hw*ca;
+  _cx[3]=x-hl*ca-hw*sa; _cy[3]=y-hl*sa+hw*ca;
+  for(let i=0;i<4;i++){
+    const j=(i+1)&3;
+    const ex=_cx[j]-_cx[i], ey=_cy[j]-_cy[i], L=Math.hypot(ex,ey)||1;
+    const nx=ey/L, ny=-ex/L;                                                   // 외향 법선
+    const rnx=nx*CAM.cos-ny*CAM.sin, rny=nx*CAM.sin+ny*CAM.cos;
+    if(rnx+rny<=0) continue;                                                   // 뒷면 컬링
+    g.fillStyle=shade(col,Math.max(.42,.74+.20*rnx-.24*rny));
+    g.beginPath();
+    g.moveTo(isoX(_cx[i],_cy[i]),isoY(_cx[i],_cy[i],z));
+    g.lineTo(isoX(_cx[j],_cy[j]),isoY(_cx[j],_cy[j],z));
+    g.lineTo(isoX(_cx[j],_cy[j]),isoY(_cx[j],_cy[j],z1));
+    g.lineTo(isoX(_cx[i],_cy[i]),isoY(_cx[i],_cy[i],z1));
+    g.closePath(); g.fill();
+  }
+  g.fillStyle=shade(col,1.15);
+  g.beginPath();
+  g.moveTo(isoX(_cx[0],_cy[0]),isoY(_cx[0],_cy[0],z1));
+  for(let i=1;i<4;i++) g.lineTo(isoX(_cx[i],_cy[i]),isoY(_cx[i],_cy[i],z1));
   g.closePath(); g.fill();
 }
 // 바닥 스터드(로블록스 시그니처 돌기)
@@ -346,26 +391,60 @@ function stud(g,x,y,z,r,col){
   g.fill();
 }
 
-// ---- 로블록스 캐릭터(블록 휴머노이드) ----
-const SKIN_A='#f5cd30', TORSO_A='#1e88e5', LEG_A='#43a047';   // 아군 = 클래식 누브
-const SKIN_E='#e06a5a', TORSO_E='#8b1a2b', LEG_E='#341018';   // 적
-function character(g,x,y,s,skin,torso,leg,phase,moving){
+// ---- 캐릭터(사람 형태 휴머노이드) : 바라보는 방향(face)으로 몸 전체가 회전 ----
+// 아군 = 파란 제복 병사 / 적 = 붉은 갑옷 전사
+const ALLY_SKIN='#f7c98b', ALLY_TORSO='#2f6fd0', ALLY_LEG='#2b3a5c',
+      ALLY_HAIR='#4a342a', ALLY_SHOE='#1a2236', ALLY_BELT='#f0c020';
+const ENEMY_SKIN='#c9705f', ENEMY_TORSO='#8b1a2b', ENEMY_LEG='#341018',
+      ENEMY_HAIR='#2a0d14', ENEMY_SHOE='#1a0509', ENEMY_BELT='#6b1020';
+const EYE_COL='#141a24';
+// 사람 1명 그리기. 로컬 좌표 : +x=앞(바라보는 방향), +y=왼쪽, z=위
+function character(g,x,y,s,C,phase,moving,face,pose){
   const anim = moving && !REDUCE;
-  const bob = anim ? Math.sin(phase)*1.4*s : 0;
-  const lift1 = anim ? Math.max(0,Math.sin(phase))*3*s : 0;
-  const lift2 = anim ? Math.max(0,Math.sin(phase+Math.PI))*3*s : 0;
-  const parts=[
-    {x:x-13*s, y:y, z:18*s+bob, w:6*s,  d:8*s,  h:18*s, c:skin},   // 왼팔(먼쪽)
-    {x:x-5*s,  y:y, z:lift1,    w:8*s,  d:8*s,  h:18*s, c:leg},    // 왼다리
-    {x:x+5*s,  y:y, z:lift2,    w:8*s,  d:8*s,  h:18*s, c:leg},    // 오른다리
-    {x:x,      y:y, z:18*s+bob, w:20*s, d:10*s, h:20*s, c:torso},  // 몸통
-    {x:x,      y:y, z:38*s+bob, w:13*s, d:13*s, h:12*s, c:skin},   // 머리
-    {x:x+13*s, y:y, z:18*s+bob, w:6*s,  d:8*s,  h:18*s, c:skin},   // 오른팔(앞쪽)
-  ];
-  parts.sort((a,b)=> (depthOf(a.x,a.y)-depthOf(b.x,b.y)) || a.z-b.z);
-  for(const p of parts) box(g,p.x,p.y,p.z,p.w,p.d,p.h,p.c);
-  return 50*s+bob; // 머리 꼭대기 높이
+  const sw   = anim ? Math.sin(phase) : 0;                 // 팔다리 스윙
+  const bob  = anim ? Math.abs(Math.sin(phase))*1.3*s : 0; // 상하 흔들림
+  const atk  = pose||0;                                    // 0=평상시, 1=공격자세(팔 앞으로)
+  const ca=Math.cos(face), sa=Math.sin(face);
+  const P=[];
+  // (앞뒤 fx, 좌우 fy, 높이 z, 길이 len, 폭 wid, 높이 h, 색)
+  const add=(fx,fy,z,len,wid,h,c)=>P.push({
+    x:x+(fx*ca-fy*sa)*s, y:y+(fx*sa+fy*ca)*s, z:z*s, len:len*s, wid:wid*s, h:h*s, c});
+
+  const legSw=sw*3.2, armSw=-sw*3.6;
+  // 다리 + 신발
+  add( legSw, 4.2, 3.5, 6.5, 6.5, 16, C.leg);
+  add(-legSw,-4.2, 3.5, 6.5, 6.5, 16, C.leg);
+  add( legSw+1.0, 4.2, 0, 9.5, 6.8, 3.5, C.shoe);          // 발(앞쪽으로 조금 김)
+  add(-legSw+1.0,-4.2, 0, 9.5, 6.8, 3.5, C.shoe);
+  // 골반·몸통·어깨(위로 갈수록 넓어져 사람 실루엣)
+  add(0,0,19.5+bob, 8.5, 14.5, 3.5, C.belt);               // 벨트
+  add(0,0,23+bob,   8.0, 15.5, 12, C.torso);               // 몸통(허리~가슴)
+  add(0,0,35+bob,   8.8, 19.0, 5.5, C.torso);              // 어깨(더 넓게)
+  add(0,0,40.5+bob, 4.5, 5.0, 2.5, C.skin);                // 목
+  // 팔 + 손 (공격 자세면 앞으로 들어올림)
+  const armF = atk?5.5:0, armZ = atk?26:21.5, sleeve=darken(C.torso,0.78);
+  add(armF+armSw, 10.8, armZ+bob, 6, 6, 14, sleeve);       // 왼팔(소매)
+  add(armF-armSw,-10.8, armZ+bob, 6, 6, 14, sleeve);       // 오른팔
+  add(armF+armSw, 10.8, armZ-3.5+bob, 6, 6, 4, C.skin);    // 왼손
+  add(armF-armSw,-10.8, armZ-3.5+bob, 6, 6, 4, C.skin);    // 오른손
+  // 머리 + 머리카락 + 눈 + 코
+  add(0,0,43+bob, 10.5, 11.5, 11, C.skin);                 // 머리
+  add(0,0,53+bob, 11.2, 12.2, 3.2, C.hair);                // 머리카락(윗면)
+  add(-4.6,0,45.5+bob, 2.5, 11.8, 8.5, C.hair);            // 뒷머리
+  add(6.4,2.9,48.8+bob, 3.0, 2.9, 2.4, EYE_COL);           // 왼눈(얼굴 밖으로 충분히 돌출)
+  add(6.4,-2.9,48.8+bob, 3.0, 2.9, 2.4, EYE_COL);          // 오른눈
+  add(6.6,0,44.8+bob, 3.0, 2.8, 2.6, C.skin);              // 코
+  add(6.2,0,42.8+bob, 2.2, 5.0, 1.4, darken(C.skin,0.62)); // 입
+  if(C.horn){                                              // 적 = 투구 뿔
+    add(1.5, 6.2, 55.5+bob, 2.6, 2.6, 4.5, C.horn);
+    add(1.5,-6.2, 55.5+bob, 2.6, 2.6, 4.5, C.horn);
+  }
+  P.sort((a,b)=> (depthOf(a.x,a.y)-depthOf(b.x,b.y)) || a.z-b.z);
+  for(const p of P) rbox(g,p.x,p.y,p.z,p.len,p.wid,p.h,face,p.c);
+  return 56*s+bob;   // 머리 꼭대기 높이(HP바 위치용)
 }
+const ALLY_C ={skin:ALLY_SKIN, torso:ALLY_TORSO, leg:ALLY_LEG, hair:ALLY_HAIR, shoe:ALLY_SHOE, belt:ALLY_BELT};
+const ENEMY_C={skin:ENEMY_SKIN,torso:ENEMY_TORSO,leg:ENEMY_LEG, hair:ENEMY_HAIR, shoe:ENEMY_SHOE, belt:ENEMY_BELT, horn:'#e8d9c0'};
 
 // ---- 지면 캐시(정적) ----
 let ground=null;
@@ -447,7 +526,7 @@ const G = {
   upTotal:0, upToward:0, spawnTimer:0, nextBossLevel:5, levelOffset:0,
   weaponTier:0, armorTier:0, shopOpen:false, potionField:[], buffs:{rageT:0,luckT:0,guardT:0},
   allies:[], enemies:[], shots:[], fx:[], nums:[],
-  turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1,
+  turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1, anim:0,
 };
 
 // ---- 기록(하이스코어) : localStorage 영속 ----
@@ -483,12 +562,14 @@ function layoutAllies(){
   for(let i=0;i<N;i++){
     const a=(i/N)*Math.PI*2-Math.PI/2;
     G.allies[i].x=b.x+Math.cos(a)*R; G.allies[i].y=b.y+Math.sin(a)*R;
+    G.allies[i].home=a;                       // 적이 없을 때 바라보는 방향(기지 바깥쪽)
   }
 }
 function newAlly(){
   const s=allyStat();
   return {x:0,y:0,hp:s.maxHp,maxHp:s.maxHp,dmg:s.dmg+weaponDmg(),fire:s.fire,def:armorDef(),
-          range:CFG.range,r:15,cd:Math.random()*0.3,dead:false,phase:Math.random()*7,shootFlash:0};
+          range:CFG.range,r:15,cd:Math.random()*0.3,dead:false,phase:Math.random()*7,shootFlash:0,
+          face:0,home:0};
 }
 function applyAllyStats(){
   const s=allyStat();
@@ -509,22 +590,31 @@ function reset(){
   layoutAllies();
 }
 // ---- 포탑 ----
-function turretCost(){ return Math.round(CFG.turretCost0*Math.pow(CFG.turretCostMul,G.turretsBought)); }
+// 등급별 가격 : 등급이 높을수록 비싸고, 많이 살수록 조금씩 비싸짐
+function turretCost(tier){
+  return Math.round(CFG.turretCost0*Math.pow(CFG.turretTierCostMul,tier||0)
+                    *Math.pow(CFG.turretCostMul,G.turretsBought));
+}
 function freeSlot(){
   for(let i=0;i<TSLOTS.length;i++){ if(!G.turrets.some(t=>t.slot===i)) return i; }
   return -1;
 }
-function buyTurret(){
+function buyTurret(tier){
+  tier=Math.max(0,Math.min(CFG.turretTiers.length-1, tier|0));
   if(G.phase==='over') return;
-  const cost=turretCost(), slot=freeSlot();
+  const cost=turretCost(tier), slot=freeSlot();
   if(slot<0){ floatText(baseNode().x,baseNode().y,'포탑 자리가 가득 찼습니다','#ff8a97'); return; }
   if(G.gold<cost) return;
   G.gold-=cost; G.turretsBought++;
   const s=TSLOTS[slot];
-  G.turrets.push({slot, tier:0, x:s.x, y:s.y, cd:Math.random()*0.4, shootFlash:0});
-  floatText(s.x,s.y,'🏰 '+CFG.turretTiers[0].n+' 건설!','#8ad3ff');
+  G.turrets.push({slot, tier, x:s.x, y:s.y, cd:Math.random()*0.4, shootFlash:0, aim:0});
+  floatText(s.x,s.y,'🏰 '+CFG.turretTiers[tier].n+' 건설!','#8ad3ff');
+  burst(s.x,s.y,CFG.turretTiers[tier].top,10);
   updateShop();
 }
+// 총구 높이 : 발사체가 총열 끝에서 나가도록
+function muzzleZ(t){ const T=CFG.turretTiers[t.tier];      // drawTurret 의 총열 높이와 동일
+  return 8+t.tier*0.8 + T.hh + (10+t.tier*1.4)*0.30; }
 function mergeTurrets(src,dst){
   if(!src||!dst||src===dst||src.tier!==dst.tier) return false;
   if(dst.tier>=CFG.turretTiers.length-1) return false;
@@ -547,7 +637,7 @@ function autoMerge(){                                   // 가능한 쌍 중 가
 function sellTurret(){
   const t=G.selTurret || G.turrets[G.turrets.length-1];
   if(!t) return;
-  const refund=Math.round(CFG.turretCost0*Math.pow(2,t.tier)*CFG.turretSellFrac);
+  const refund=Math.round(CFG.turretCost0*Math.pow(CFG.turretTierCostMul,t.tier)*CFG.turretSellFrac);
   G.gold+=refund; G.turrets=G.turrets.filter(x=>x!==t); G.selTurret=null;
   floatText(t.x,t.y,'포탑 판매 💰+'+refund,'#ffd166');
   updateShop();
@@ -556,7 +646,7 @@ function sellTurret(){
 function spawnEnemy(){
   const s=enemyStats(), st=WP[0];
   const e={x:st.x,y:st.y,hp:s.hp,maxHp:s.hp,speed:s.speed,dmg:s.dmg,r:s.r,
-           seg:1,target:null,atk:0,flash:0,phase:Math.random()*7,
+           seg:1,target:null,atk:0,flash:0,phase:Math.random()*7,face:0,atkPose:0,
            slowT:0,weakT:0,freezeT:0,poisonT:0,burnT:0};
   for(const f of G.potionField){ if(Math.random()<f.prob) applyPotion(e,f.key); } // 잔류 물약장 → 신규 적에도 확률 적용
   G.enemies.push(e);
@@ -564,11 +654,15 @@ function spawnEnemy(){
 function spawnBoss(){
   const s=enemyStats(), st=WP[0], hp=Math.round(s.hp*CFG.bossHpMult);
   const e={x:st.x,y:st.y,hp,maxHp:hp,speed:s.speed*CFG.bossSpeedMult,dmg:s.dmg*CFG.bossDmgMult,
-           r:CFG.eR0*CFG.bossRMult,seg:1,target:null,atk:0,flash:0,phase:Math.random()*7,
+           r:CFG.eR0*CFG.bossRMult,seg:1,target:null,atk:0,flash:0,phase:Math.random()*7,face:0,atkPose:0,
            slowT:0,weakT:0,freezeT:0,poisonT:0,burnT:0,isBoss:true,bossLevel:G.level};
   for(const f of G.potionField){ if(Math.random()<f.prob) applyPotion(e,f.key); }
   G.enemies.push(e);
   floatText(st.x,st.y,'⚠ 보스 등장! (스테이지 '+G.level+')','#ff3b6b');
+}
+function lerpAng(a,b,k){                      // 각도 보간(최단 회전)
+  a=a||0; let d=((b-a+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
+  return a+d*k;
 }
 function nearestAlly(x,y){
   let best=null,bd=1e9;
@@ -600,6 +694,7 @@ let last=0;
 function frame(ts){ const dt=Math.min(.05,(ts-last)/1000||0); last=ts; update(dt); draw(); requestAnimationFrame(frame); }
 
 function update(dt){
+  G.anim+=dt;                                    // 장식 애니메이션용 시계(항상 진행)
   if(G.phase==='running' && !G.shopOpen){
     G.time+=dt; G.level=Math.max(1, levelFor(G.time)-G.levelOffset);   // 환각인형 = 난이도 감소
     if(G.stopCd>0) G.stopCd=Math.max(0,G.stopCd-dt);                   // 끝내기 쿨타임(게임 진행 중에만 감소)
@@ -620,17 +715,29 @@ function update(dt){
   const rage=G.buffs.rageT>0;
   if(active) for(const a of G.allies){
     if(a.dead) continue; a.cd-=dt; if(a.shootFlash>0) a.shootFlash-=dt;
+    const aim=nearestEnemy(a.x,a.y,a.range*1.6);
+    if(aim) a.face=lerpAng(a.face, Math.atan2(aim.y-a.y, aim.x-a.x), 1-Math.pow(0.0004,dt));  // 적을 바라봄
+    else    a.face=lerpAng(a.face, a.home, 1-Math.pow(0.02,dt));                              // 없으면 바깥쪽
     if(a.cd<=0){ const t=nearestEnemy(a.x,a.y,a.range);
       if(t){ a.cd=a.fire*(rage?CFG.rageFire:1); a.shootFlash=0.08;
         G.shots.push({x:a.x,y:a.y,target:t,dmg:a.dmg*(rage?CFG.rageDmg:1),speed:540,col:'#ffd166'}); } }
+  }
+  for(const t of G.turrets){                     // 총구 조준(정지 중에도 부드럽게 회전)
+    const T=CFG.turretTiers[t.tier];
+    const aim=nearestEnemy(t.x,t.y,T.range*1.35);
+    if(aim) t.aim=lerpAng(t.aim, Math.atan2(aim.y-t.y, aim.x-t.x), 1-Math.pow(0.0002,dt));
   }
   if(active) for(const t of G.turrets){          // 포탑도 함께 사격
     const T=CFG.turretTiers[t.tier];
     t.cd-=dt; if(t.shootFlash>0) t.shootFlash-=dt;
     if(t.cd<=0){ const e=nearestEnemy(t.x,t.y,T.range);
       if(e){ t.cd=T.fire*(rage?CFG.rageFire:1); t.shootFlash=0.1;
-        G.shots.push({x:t.x,y:t.y,target:e,dmg:T.dmg*(rage?CFG.rageDmg:1),speed:640,
-                      col:T.top,splash:T.splash||0,burn:T.burn||0,slow:T.slow||0}); } }
+        t.aim=Math.atan2(e.y-t.y, e.x-t.x);                        // 발사 순간엔 정확히 조준
+        const mz=muzzleZ(t), off=T.base*0.2+T.bl;          // drawTurret 의 총구 위치와 동일
+        G.shots.push({x:t.x+Math.cos(t.aim)*off, y:t.y+Math.sin(t.aim)*off, z:mz,
+                      target:e,dmg:T.dmg*(rage?CFG.rageDmg:1),speed:640,
+                      col:T.top,splash:T.splash||0,burn:T.burn||0,slow:T.slow||0,size:5+t.tier});
+        burst(t.x+Math.cos(t.aim)*off, t.y+Math.sin(t.aim)*off, T.top, 2); } }
   }
   if(active){
     for(const p of G.shots){
@@ -661,16 +768,19 @@ function update(dt){
       if(e.hp<=0){ e.dead=true; continue; } }
     if(e.freezeT>0){ e.freezeT-=dt; continue; }   // 빙결: 이동·공격 정지
     e.phase+=dt*7;
+    if(e.atkPose>0) e.atkPose-=dt;
     const sp = e.slowT>0 ? e.speed*0.5 : e.speed;
     if(e.seg<WP.length){
       const w=WP[e.seg], dx=w.x-e.x, dy=w.y-e.y, d=Math.hypot(dx,dy)||1;
+      e.face=lerpAng(e.face, Math.atan2(dy,dx), 1-Math.pow(0.002,dt));   // 진행 방향을 바라봄
       if(d<6){ e.seg++; } else { e.x+=dx/d*sp*dt; e.y+=dy/d*sp*dt; }
     } else {
       let t=e.target; if(!t||t.dead) t=e.target=nearestAlly(e.x,e.y);
       if(t){
         const dx=t.x-e.x, dy=t.y-e.y, d=Math.hypot(dx,dy)||1, contact=e.r+t.r;
+        e.face=lerpAng(e.face, Math.atan2(dy,dx), 1-Math.pow(0.002,dt));
         if(d>contact-2){ e.x+=dx/d*sp*dt; e.y+=dy/d*sp*dt; }
-        else { e.atk-=dt; if(e.atk<=0){ e.atk=.8;
+        else { e.atk-=dt; if(e.atk<=0){ e.atk=.8; e.atkPose=0.35;
           const ed=e.dmg*(e.weakT>0?0.5:1);              // 약화 = 공격력 절반
           const edef=t.def+(G.buffs.guardT>0?CFG.guardDef:0);          // 수호인형 = 추가 방어
           const taken=ed*(1 - (edef>0 ? edef/(edef+CFG.defK) : 0));    // 방어력 경감
@@ -718,22 +828,25 @@ function draw(){
       if(o.dead){ // 쓰러진 아군 = 납작한 회색 블록
         box(ctx,o.x,o.y,0,22,14,5,'#5b6478');
       } else {
-        const top=character(ctx,o.x,o.y,1.15,SKIN_A,o.shootFlash>0?'#63b8ff':TORSO_A,LEG_A,0,false);
+        const C=Object.assign({},ALLY_C);
+        if(o.shootFlash>0) C.torso='#63b8ff';
+        const top=character(ctx,o.x,o.y,1.05,C,o.phase,false,o.face||0,o.shootFlash>0?1:0);
         hpBar(o.x,o.y,top+10,o.hp/o.maxHp,'#38e8b0');
       }
     } else if(it.k==='e'){
-      const s=o.r/CFG.eR0;
-      let torso=o.isBoss?'#8a1f9e':TORSO_E, skin=o.isBoss?'#c85ad6':SKIN_E, leg=o.isBoss?'#3a0d45':LEG_E;
-      if(o.flash>0){ torso=skin='#ffffff'; }
-      else if(o.freezeT>0){ torso='#7fd4ff'; skin='#bfe9ff'; }   // 빙결
-      else if(o.burnT>0){ torso='#ff7a1a'; skin='#ffb066'; }     // 화상
-      else if(o.poisonT>0){ torso='#6fbf3a'; skin='#a7e07a'; }   // 독
-      else if(o.slowT>0){ torso=o.isBoss?'#9b3fb0':'#7b6fd0'; }  // 감속
-      else if(o.weakT>0){ torso='#6b7280'; }                     // 약화
-      const top=character(ctx,o.x,o.y,s,skin,torso,leg,o.phase,o.freezeT<=0);
+      const s=o.r/CFG.eR0, C=Object.assign({},ENEMY_C);
+      if(o.isBoss){ C.torso='#8a1f9e'; C.skin='#c85ad6'; C.leg='#3a0d45'; C.hair='#25062c'; C.horn='#ffd166'; }
+      if(o.flash>0){ C.torso=C.skin=C.leg='#ffffff'; }
+      else if(o.freezeT>0){ C.torso='#7fd4ff'; C.skin='#bfe9ff'; C.leg='#5fb6e6'; }  // 빙결
+      else if(o.burnT>0){ C.torso='#ff7a1a'; C.skin='#ffb066'; }                     // 화상
+      else if(o.poisonT>0){ C.torso='#6fbf3a'; C.skin='#a7e07a'; }                   // 독
+      else if(o.slowT>0){ C.torso=o.isBoss?'#9b3fb0':'#7b6fd0'; }                    // 감속
+      else if(o.weakT>0){ C.torso='#6b7280'; }                                       // 약화
+      const top=character(ctx,o.x,o.y,s,C,o.phase,o.freezeT<=0,o.face||0,o.atkPose>0?1:0);
       if(o.isBoss||o.hp<o.maxHp) hpBar(o.x,o.y,top+8,o.hp/o.maxHp, o.isBoss?'#ff3b6b':'#ff8a97');
     } else if(it.k==='p'){
-      box(ctx,o.x,o.y,30,7,7,7,o.col||'#ffd166');
+      const ps=o.size||7;
+      box(ctx,o.x,o.y,o.z==null?30:o.z,ps,ps,ps,o.col||'#ffd166');
     } else {
       const al=1-o.t/o.life;
       ctx.globalAlpha=Math.max(0,al);
@@ -761,17 +874,81 @@ function draw(){
   if(G.phase==='paused'){ banner('정비 중 — 골드로 강화하고 “시작”으로 재개','#ffd166');
     if(G.stopCd>0) subline('끝내기 쿨타임 '+Math.ceil(G.stopCd)+'초 (게임 진행 중 감소)','#ff8a97',52); }
 }
-// ---- 포탑 그리기 (블록 타워 + 레벨 표시) ----
+// ---- 포탑 그리기 : 등급마다 크기·모양이 다르고, 총구가 적을 향해 돌아감 ----
 function drawTurret(g,t){
-  const T=CFG.turretTiers[t.tier], sel=(G.selTurret===t), h=16+t.tier*4;
-  if(sel){                                    // 선택 표시 링
+  const T=CFG.turretTiers[t.tier], sel=(G.selTurret===t);
+  const ang=t.aim||0, ca=Math.cos(ang), sa=Math.sin(ang);
+  const recoil=(t.shootFlash>0? t.shootFlash*26 : 0);         // 발사 반동(총열이 뒤로 밀림)
+  const hot=t.shootFlash>0;
+  const baseH=8+t.tier*0.8, headZ=baseH+T.hh, headH=10+t.tier*1.4;
+  const side=(o,f)=>[t.x+ca*(f||0)-sa*o, t.y+sa*(f||0)+ca*o]; // (좌우 o, 앞뒤 f) → 월드 좌표
+
+  if(sel){                                                    // 선택 링
     g.strokeStyle='#ffd166'; g.lineWidth=Math.max(1,2.5*CAM.scale);
-    g.beginPath(); g.ellipse(isoX(t.x,t.y),isoY(t.x,t.y,1), 26*ISO_X*1.42*CAM.scale, 26*ISO_Y*1.42*CAM.scale,0,0,7); g.stroke();
+    g.beginPath(); g.ellipse(isoX(t.x,t.y),isoY(t.x,t.y,1), (T.base*0.8)*ISO_X*1.42*CAM.scale, (T.base*0.8)*ISO_Y*1.42*CAM.scale,0,0,7); g.stroke();
   }
-  box(g,t.x,t.y,0,32,32,9,'#6b7280');                                   // 받침
-  box(g,t.x,t.y,9,20,20,h,T.col);                                       // 기둥
-  box(g,t.x,t.y,9+h,26,26,11,t.shootFlash>0?'#ffffff':T.top);           // 포신 헤드
-  const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,9+h+22);                      // 레벨 라벨
+
+  // 부위를 모아 깊이 정렬 후 그린다(뒤쪽 총열이 머리에 가려지도록)
+  const P=[], add=(x,y,z,len,wid,h,c,a)=>P.push({x,y,z,len,wid,h,c,a:(a===undefined?0:a)});
+  add(t.x,t.y,0,T.base,T.base,baseH,'#6b7280');                          // 받침대
+  add(t.x,t.y,baseH-1.5,T.base*0.86,T.base*0.86,2,'#565f70');
+
+  // ---- 등급별 기둥 외형 ----
+  const S=T.style, bw=T.body;
+  if(S==='wood'){                                             // Lv1 : 통나무 기둥 + 버팀목
+    add(t.x,t.y,baseH,bw,bw,T.hh,T.col);
+    for(const q of [-1,1]){ const p=side(bw*0.62*q); add(p[0],p[1],baseH,4,4,T.hh*0.62,'#8a5c2c'); }
+  } else if(S==='stone'){                                     // Lv2 : 돌기둥 + 성가퀴(요철)
+    add(t.x,t.y,baseH,bw,bw,T.hh,T.col);
+    for(let i=0;i<4;i++){ const a=i*Math.PI/2+Math.PI/4, r=bw*0.52;
+      add(t.x+Math.cos(a)*r,t.y+Math.sin(a)*r,baseH+T.hh-2,6,6,7,'#9ba3ae'); }
+  } else if(S==='steel'){                                     // Lv3 : 철골 4기둥 + 보강판
+    for(let i=0;i<4;i++){ const a=i*Math.PI/2+Math.PI/4, r=bw*0.5;
+      add(t.x+Math.cos(a)*r,t.y+Math.sin(a)*r,baseH,6,6,T.hh,T.col); }
+    add(t.x,t.y,baseH+T.hh*0.42,bw*1.05,bw*1.05,4,'#59677c');
+    add(t.x,t.y,baseH+T.hh-4,bw*1.15,bw*1.15,4,'#59677c');
+  } else if(S==='magic'){                                     // Lv4 : 마법 기둥 + 떠 있는 크리스탈
+    add(t.x,t.y,baseH,bw*0.8,bw*0.8,T.hh,T.col);
+    add(t.x,t.y,baseH+T.hh*0.5,bw*1.15,bw*1.15,5,'#4a2f8a');
+    const fl=Math.sin(G.anim*2)*3;
+    add(t.x,t.y,headZ+headH+8+fl,11,11,13,'#c9a6ff',G.anim*1.4);          // 회전하며 떠 있는 크리스탈
+  } else if(S==='flame'){                                     // Lv5 : 용광로 기둥 + 양옆 연료탱크
+    add(t.x,t.y,baseH,bw*0.85,bw*0.85,T.hh,T.col);
+    for(const q of [-1,1]){ const p=side(bw*0.78*q,-2);
+      add(p[0],p[1],baseH+T.hh*0.22,10,10,18,'#7a2a10',ang); }
+    add(t.x,t.y,baseH+T.hh*0.2,bw*1.1,bw*1.1,6,'#e2601f');                // 화로 링
+  } else if(S==='thunder'){                                   // Lv6 : 발전기 + 피뢰침 + 스파크
+    add(t.x,t.y,baseH,bw*0.82,bw*0.82,T.hh,T.col);
+    add(t.x,t.y,baseH+T.hh*0.5,bw*1.2,bw*1.2,6,'#1c4f78');
+    for(const q of [-1,1]){ const p=side(bw*0.7*q,-3);
+      add(p[0],p[1],headZ-2,4,4,22,'#9fe4ff',ang); }
+    if(Math.sin(G.anim*9)>0.4) add(t.x,t.y,headZ+headH+20,7,7,7,'#e8f9ff');
+  } else {                                                    // Lv7 : 용의 포탑 - 날개 + 뿔
+    add(t.x,t.y,baseH,bw*0.9,bw*0.9,T.hh,T.col);
+    add(t.x,t.y,baseH+T.hh*0.46,bw*1.25,bw*1.25,7,'#4d0a1f');
+    for(const q of [-1,1]){ const p=side(bw*0.92*q,-6);                   // 날개
+      add(p[0],p[1],headZ-10,15,6,20,'#5e0c22',ang); }
+    for(const q of [-1,1]){ const p=side(T.base*0.16*q, T.base*0.1);      // 뿔
+      add(p[0],p[1],headZ+headH-2,5,5,12,'#ffd166',ang); }
+  }
+
+  // ---- 포탑 머리 + 총열(적을 향해 회전) ----
+  add(t.x,t.y,headZ,T.base*0.64,T.base*0.58,headH, hot?'#ffffff':T.top, ang);
+  const bl=T.bl, bwid=T.bw, bz=headZ+headH*0.30, root=T.base*0.2-recoil*0.35;
+  const offs = T.bn===1 ? [0] : T.bn===2 ? [-bwid*0.8, bwid*0.8] : [-bwid*1.45,0,bwid*1.45];
+  for(const so of offs){
+    const c=side(so, root+bl*0.5);
+    add(c[0],c[1],bz,bl,bwid,bwid, hot?'#fff3c4':'#4a5364', ang);         // 총열
+    const m=side(so, root+bl);
+    add(m[0],m[1],bz-bwid*0.25,bwid*0.9,bwid*1.45,bwid*1.45, hot?'#ffffff':'#39404f', ang);  // 총구
+    if(hot){ const f=side(so, root+bl+bwid*1.2);                          // 총구 화염
+      add(f[0],f[1],bz-bwid*0.25,8,bwid*1.15,bwid*1.15,'#ffe08a', ang); }
+  }
+  P.sort((a,b)=> (depthOf(a.x,a.y)-depthOf(b.x,b.y)) || a.z-b.z);
+  for(const q of P) rbox(g,q.x,q.y,q.z,q.len,q.wid,q.h,q.a,q.c);
+
+  // 레벨 라벨
+  const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,headZ+headH+(T.style==='dragon'?34:22));
   g.textAlign='center'; g.font='bold '+Math.max(9,11*CAM.scale)+'px Segoe UI';
   g.lineWidth=3; g.strokeStyle='rgba(0,0,0,.65)';
   g.strokeText('Lv'+(t.tier+1),sx,sy); g.fillStyle=T.top; g.fillText('Lv'+(t.tier+1),sx,sy);
@@ -862,12 +1039,17 @@ function openShop(){ if(G.phase==='over') return; G.shopOpen=true;
 function closeShop(){ G.shopOpen=false; document.getElementById('shop').style.display='none'; }
 function updateShop(){
   document.getElementById('shopGold').textContent=Math.floor(G.gold);
-  // 포탑
-  const tc=turretCost(), slot=freeSlot(), bt=document.getElementById('buyTurret');
-  const T0=CFG.turretTiers[0];
-  if(slot<0){ bt.textContent='포탑 자리가 가득 찼습니다 ('+TSLOTS.length+'/'+TSLOTS.length+')'; bt.disabled=true; }
-  else { bt.textContent='▶ '+T0.n+' 건설  (공격 '+T0.dmg+' · 사거리 '+T0.range+')   💰'+tc;
-         bt.disabled=G.gold<tc; }
+  // 포탑 : 등급별 직접 구매 버튼
+  const slot=freeSlot();
+  for(let i=0;i<CFG.turretTiers.length;i++){
+    const T=CFG.turretTiers[i], b=document.getElementById('buyTur_'+i), c=turretCost(i);
+    b.textContent='Lv'+(i+1)+' '+T.n+'\n공격 '+T.dmg+' · 💰'+c;
+    b.disabled = (slot<0) || G.gold<c;
+    b.style.borderLeft='4px solid '+T.top;
+  }
+  document.getElementById('turSlotInfo').textContent =
+    slot<0 ? '⚠ 포탑 자리가 가득 찼습니다 ('+TSLOTS.length+'/'+TSLOTS.length+')'
+           : '빈 자리 '+(TSLOTS.length-G.turrets.length)+'/'+TSLOTS.length;
   const maxTier=CFG.turretTiers.length-1;
   let pair=-1;
   for(let i=maxTier-1;i>=0;i--){ if(G.turrets.filter(t=>t.tier===i).length>=2){ pair=i; break; } }
@@ -875,7 +1057,7 @@ function updateShop(){
   mb.textContent = pair>=0 ? ('⚡ 합체\nLv'+(pair+1)+'×2 → '+CFG.turretTiers[pair+1].n) : '⚡ 합체\n같은 레벨 2개 필요';
   mb.style.whiteSpace='pre-line'; mb.disabled=(pair<0);
   const sb=document.getElementById('sellTurret'), st=G.selTurret||G.turrets[G.turrets.length-1];
-  sb.textContent = st ? ('♻ 포탑 판매\n'+CFG.turretTiers[st.tier].n+' 💰+'+Math.round(CFG.turretCost0*Math.pow(2,st.tier)*CFG.turretSellFrac))
+  sb.textContent = st ? ('♻ 포탑 판매\n'+CFG.turretTiers[st.tier].n+' 💰+'+Math.round(CFG.turretCost0*Math.pow(CFG.turretTierCostMul,st.tier)*CFG.turretSellFrac))
                       : '♻ 포탑 판매\n보유 포탑 없음';
   sb.style.whiteSpace='pre-line'; sb.disabled=!st;
   const counts=new Array(CFG.turretTiers.length).fill(0);
@@ -984,7 +1166,7 @@ cv.addEventListener('pointerdown', ev=>{
   const r=cv.getBoundingClientRect(), mx=ev.clientX-r.left, my=ev.clientY-r.top;
   let hit=null, bd=46*46;
   for(const t of G.turrets){
-    const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,26+t.tier*4);
+    const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,muzzleZ(t));
     const d=(sx-mx)**2+(sy-my)**2; if(d<bd){ bd=d; hit=t; }
   }
   if(!hit){ G.selTurret=null; return; }
@@ -1000,7 +1182,15 @@ cv.addEventListener('pointerdown', ev=>{
 document.getElementById('rotBtn').onclick=rotateView;
 document.getElementById('shopBtn').onclick=openShop;
 document.getElementById('shopClose').onclick=closeShop;
-document.getElementById('buyTurret').onclick=buyTurret;
+(function buildTurretShop(){                     // 등급별 구매 버튼 생성
+  const grid=document.getElementById('turBuyGrid');
+  CFG.turretTiers.forEach((T,i)=>{
+    const b=document.createElement('button');
+    b.id='buyTur_'+i; b.className='buy tur'; b.style.whiteSpace='pre-line';
+    b.onclick=()=>buyTurret(i);
+    grid.appendChild(b);
+  });
+})();
 document.getElementById('mergeTurret').onclick=()=>{ autoMerge(); updateShop(); };
 document.getElementById('sellTurret').onclick=sellTurret;
 document.getElementById('buyWeapon').onclick=buyWeapon;
