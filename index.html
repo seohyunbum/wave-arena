@@ -150,7 +150,7 @@
       <button id="shopClose">닫기</button>
     </div>
     <div class="ssec">
-      <h3>포탑 <small>함께 적을 공격 · 원하는 곳으로 이동 · 같은 레벨 2개 합체 = 상위 등급</small></h3>
+      <h3>포탑 <small>상위 등급 값 = 합체로 만들 때와 같은 비용 +15% (사든 합치든 손해 없음)</small></h3>
       <div class="pots" id="turBuyGrid"></div>
       <div class="pots" style="margin-top:6px">
         <button id="mergeTurret" class="buy merge"></button>
@@ -230,11 +230,11 @@ const CFG = {
   // ---- 끝내기 쿨타임 ----
   stopCooldown:60,
   // ---- 포탑 ----
-  // turretCostMul = 구매할수록 오르는 폭(완만하게) / turretTierCostMul = 등급당 가격 배수
-  // → 합체가 항상 더 싸고, 상위 등급 직접 구매는 "비싼 지름길"이 되도록 맞춤
+  // 상위 등급 직접 구매가 = 그 등급을 합체로 만드는 데 드는 비용 x turretBuyPremium
+  // (구매 횟수도 Lv1 환산 개수만큼 올라가므로, 사든 합치든 이후 가격 상승까지 동일하다)
   // turretMax = 보유 가능한 포탑 수 (자리는 고정되지 않고 어디든 자유 배치)
   turretMax:14, turretGap:26, turretEdge:22,   // 포탑끼리 최소 간격(겹쳐 파묻히는 것만 방지) / 맵 여백
-  turretCost0:110, turretCostMul:1.06, turretSellFrac:0.5, turretTierCostMul:3.2,
+  turretCost0:110, turretCostMul:1.06, turretSellFrac:0.5, turretBuyPremium:1.15,
   // style = 등급별 외형 / base·body·hh = 크기 / bl·bw·bn = 총열 길이·굵기·개수
   // 등급이 오를수록 연사가 크게 빨라진다 (초당 1.1발 → 8.3발, 7.5배)
   // 발당 피해는 낮추고 발수를 늘려 총 화력(DPS)은 기존 곡선을 유지
@@ -814,11 +814,20 @@ function canMerge(a,b){
   return !!a && !!b && a!==b && !isLauncher(a) && !isLauncher(b)
          && a.tier===b.tier && a.tier<CFG.turretTiers.length-1;
 }
-// 등급별 가격 : 등급이 높을수록 비싸고, 많이 살수록 조금씩 비싸짐
-function turretCost(tier){
-  return Math.round(CFG.turretCost0*Math.pow(CFG.turretTierCostMul,tier||0)
-                    *Math.pow(CFG.turretCostMul,G.turretsBought));
+// Lv(n+1) 포탑 1대 = Lv1 포탑 2^n대 분량
+function turretUnits(tier){ return Math.pow(2, tier||0); }
+// from번째 구매부터 units대를 이어서 살 때의 총액 (구매할수록 오르는 가격 반영)
+function unitsPrice(units, from){
+  const r=CFG.turretCostMul;
+  return CFG.turretCost0*Math.pow(r,from)*(Math.pow(r,units)-1)/(r-1);
 }
+// 등급별 가격 : "합체로 만들 때 드는 비용"과 같게 맞추고, 상위 등급에만 편의 프리미엄을 더한다
+// (Lv1은 기본 단위라 원가 그대로 → 상위 등급 직접 구매가 정확히 프리미엄만큼만 비싸진다)
+function turretPremium(tier){ return tier>0 ? CFG.turretBuyPremium : 1; }
+function turretCost(tier){
+  return Math.round(unitsPrice(turretUnits(tier), G.turretsBought)*turretPremium(tier));
+}
+function turretBasePrice(tier){ return unitsPrice(turretUnits(tier),0)*turretPremium(tier); }
 // 그 자리에 놓을 수 있는지 : 맵 안 + 다른 포탑과 겹치지 않음 (길 위에도 놓을 수 있다)
 function canPlace(x,y,exclude){
   const m=CFG.turretEdge;
@@ -860,7 +869,7 @@ function buyTurret(tier){
   if(G.gold<cost) return;
   const s=spawnSpot();
   if(!s){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
-  G.gold-=cost; G.turretsBought++;
+  G.gold-=cost; G.turretsBought+=turretUnits(tier);   // 합체 경로와 동일하게 환산 개수만큼 반영
   G.turrets.push({tier, x:s.x, y:s.y, cd:Math.random()*0.4, shootFlash:0, aim:0, aimT:null});
   floatText(s.x,s.y,'🏰 '+CFG.turretTiers[tier].n+' 건설!','#8ad3ff');
   burst(s.x,s.y,CFG.turretTiers[tier].top,10);
@@ -929,7 +938,7 @@ function sellTurret(){
   const t=G.selTurret || G.turrets[G.turrets.length-1];
   if(!t) return;
   const refund=Math.round((isLauncher(t) ? CFG.launcherCost
-                          : CFG.turretCost0*Math.pow(CFG.turretTierCostMul,t.tier))*CFG.turretSellFrac);
+                          : turretBasePrice(t.tier))*CFG.turretSellFrac);
   G.gold+=refund; G.turrets=G.turrets.filter(x=>x!==t); G.selTurret=null;
   floatText(t.x,t.y,'포탑 판매 💰+'+refund,'#ffd166');
   updateShop();
@@ -1452,7 +1461,7 @@ function updateShop(){
   mb.style.whiteSpace='pre-line'; mb.disabled=(pair<0);
   const sb=document.getElementById('sellTurret'), st=G.selTurret||G.turrets[G.turrets.length-1];
   sb.textContent = st ? ('♻ 판매\n'+tdef(st).n+' 💰+'+Math.round((isLauncher(st)?CFG.launcherCost
-                            :CFG.turretCost0*Math.pow(CFG.turretTierCostMul,st.tier))*CFG.turretSellFrac).toLocaleString())
+                            :turretBasePrice(st.tier))*CFG.turretSellFrac).toLocaleString())
                       : '♻ 판매\n보유 구조물 없음';
   sb.style.whiteSpace='pre-line'; sb.disabled=!st;
   const counts=new Array(CFG.turretTiers.length).fill(0);
@@ -1571,12 +1580,34 @@ function dropBossReward(e){
 
 // ---- 포탑 조작 : 끌어서 아무 곳으로나 이동 / 같은 레벨 위에 놓으면 합체 ----
 function ptOf(ev){ const r=cv.getBoundingClientRect(); return {mx:ev.clientX-r.left, my:ev.clientY-r.top}; }
+// 클릭 판정 : 포탑이 실제로 그려진 범위(받침~머리 꼭대기) 전체를 잡는다.
+// 예전엔 총구 높이 한 점에서 46px 이내만 인식해서, 받침이 큰 용의 포탑은 몸통을 눌러도 안 잡혔다.
+function turretHitBox(t){
+  const T=tdef(t), sc=CAM.scale;
+  const topZ=8+t.tier*0.8 + T.hh + (10+t.tier*1.4) + (T.style==='dragon'?14:6);
+  // 용의 포탑 날개처럼 받침 밖으로 튀어나온 장식까지 덮도록 넉넉하게 잡는다
+  const halfW=(T.base*1.05)*ISO_X*1.42*sc + 10;         // 좌우 반폭(화면 px)
+  const foot =(T.base*0.62)*ISO_Y*1.42*sc + 6;          // 받침 다이아몬드 아래 여유
+  const cx=isoX(t.x,t.y);
+  return {cx, x0:cx-halfW, x1:cx+halfW,
+          y0:isoY(t.x,t.y,topZ)-22, y1:isoY(t.x,t.y,0)+foot,   // -22 = 머리 위 레벨 라벨까지
+          cy:(isoY(t.x,t.y,topZ)+isoY(t.x,t.y,0))/2};
+}
 function turretAt(mx,my,exclude){
-  let hit=null, bd=46*46;
+  let hit=null, bd=Infinity;
   for(const t of G.turrets){
     if(t===exclude) continue;
-    const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,muzzleZ(t));
-    const d=(sx-mx)**2+(sy-my)**2; if(d<bd){ bd=d; hit=t; }
+    const b=turretHitBox(t);
+    if(mx<b.x0||mx>b.x1||my<b.y0||my>b.y1) continue;     // 그려진 범위 밖
+    const d=(b.cx-mx)**2+(b.cy-my)**2;                   // 겹치면 중심에 가까운 쪽
+    if(d<bd){ bd=d; hit=t; }
+  }
+  if(hit) return hit;
+  let bd2=44*44;                                         // 못 맞혔으면 가까운 포탑을 관대하게
+  for(const t of G.turrets){
+    if(t===exclude) continue;
+    const b=turretHitBox(t);
+    const d=(b.cx-mx)**2+(b.cy-my)**2; if(d<bd2){ bd2=d; hit=t; }
   }
   return hit;
 }
