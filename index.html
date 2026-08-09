@@ -236,20 +236,22 @@ const CFG = {
   turretMax:14, turretGap:26, turretEdge:22,   // 포탑끼리 최소 간격(겹쳐 파묻히는 것만 방지) / 맵 여백
   turretCost0:110, turretCostMul:1.06, turretSellFrac:0.5, turretTierCostMul:3.2,
   // style = 등급별 외형 / base·body·hh = 크기 / bl·bw·bn = 총열 길이·굵기·개수
+  // 등급이 오를수록 연사가 크게 빨라진다 (초당 1.1발 → 8.3발, 7.5배)
+  // 발당 피해는 낮추고 발수를 늘려 총 화력(DPS)은 기존 곡선을 유지
   turretTiers:[
-    {n:'목재 포탑',  dmg:16,  range:210, fire:0.85, col:'#a9743a', top:'#d0964e', style:'wood',
+    {n:'목재 포탑',  dmg:17,  range:210, fire:0.90, col:'#a9743a', top:'#d0964e', style:'wood',
      base:30, body:17, hh:15, bl:16, bw:5.0, bn:1},
-    {n:'석재 포탑',  dmg:34,  range:230, fire:0.78, col:'#8d949f', top:'#b8bfc9', style:'stone',
+    {n:'석재 포탑',  dmg:31,  range:230, fire:0.70, col:'#8d949f', top:'#b8bfc9', style:'stone',
      base:35, body:20, hh:20, bl:19, bw:6.0, bn:1},
-    {n:'강철 포탑',  dmg:72,  range:255, fire:0.70, col:'#6d7f96', top:'#9bb2cc', style:'steel',
+    {n:'강철 포탑',  dmg:56,  range:255, fire:0.54, col:'#6d7f96', top:'#9bb2cc', style:'steel',
      base:39, body:22, hh:25, bl:23, bw:5.5, bn:2},
-    {n:'마법 포탑',  dmg:150, range:280, fire:0.62, col:'#6d4bb0', top:'#a98bff', style:'magic',
+    {n:'마법 포탑',  dmg:98,  range:280, fire:0.40, col:'#6d4bb0', top:'#a98bff', style:'magic',
      base:43, body:24, hh:30, bl:25, bw:7.0, bn:1, splash:42},
-    {n:'화염 포탑',  dmg:310, range:300, fire:0.55, col:'#b8461c', top:'#ff8a3a', style:'flame',
+    {n:'화염 포탑',  dmg:160, range:300, fire:0.28, col:'#b8461c', top:'#ff8a3a', style:'flame',
      base:47, body:26, hh:35, bl:28, bw:9.0, bn:1, splash:58, burn:3},
-    {n:'번개 포탑',  dmg:640, range:335, fire:0.46, col:'#2a6fa8', top:'#7fd4ff', style:'thunder',
+    {n:'번개 포탑',  dmg:265, range:335, fire:0.19, col:'#2a6fa8', top:'#7fd4ff', style:'thunder',
      base:51, body:28, hh:41, bl:30, bw:6.5, bn:3, splash:74, slow:3},
-    {n:'용의 포탑',  dmg:1300,range:380, fire:0.38, col:'#7a1030', top:'#ff3b6b', style:'dragon',
+    {n:'용의 포탑',  dmg:410, range:380, fire:0.12, col:'#7a1030', top:'#ff3b6b', style:'dragon',
      base:56, body:31, hh:48, bl:34, bw:10.0, bn:2, splash:96, burn:4, slow:3},
   ],
   turretSplashFrac:0.5,
@@ -1431,7 +1433,8 @@ function updateShop(){
   const full=G.turrets.length>=CFG.turretMax;
   for(let i=0;i<CFG.turretTiers.length;i++){
     const T=CFG.turretTiers[i], b=document.getElementById('buyTur_'+i), c=turretCost(i);
-    b.textContent='Lv'+(i+1)+' '+T.n+'\n공격 '+T.dmg+' · 💰'+c;
+    b.textContent='Lv'+(i+1)+' '+T.n+'\n공격 '+T.dmg+' × 초당 '+(1/T.fire).toFixed(1)+'발'
+                 +'\n초당 화력 '+Math.round(T.dmg/T.fire).toLocaleString()+' · 💰'+c.toLocaleString();
     b.disabled = full || G.gold<c;
     b.style.borderLeft='4px solid '+T.top;
   }
@@ -1442,7 +1445,10 @@ function updateShop(){
   let pair=-1;
   for(let i=maxTier-1;i>=0;i--){ if(G.turrets.filter(t=>t.tier===i).length>=2){ pair=i; break; } }
   const mb=document.getElementById('mergeTurret');
-  mb.textContent = pair>=0 ? ('⚡ 합체\nLv'+(pair+1)+'×2 → '+CFG.turretTiers[pair+1].n) : '⚡ 합체\n같은 레벨 2개 필요';
+  mb.textContent = pair>=0
+    ? ('⚡ 합체\nLv'+(pair+1)+'×2 → '+CFG.turretTiers[pair+1].n
+       +'\n연사 초당 '+(1/CFG.turretTiers[pair].fire).toFixed(1)+'→'+(1/CFG.turretTiers[pair+1].fire).toFixed(1)+'발')
+    : '⚡ 합체\n같은 레벨 2개 필요';
   mb.style.whiteSpace='pre-line'; mb.disabled=(pair<0);
   const sb=document.getElementById('sellTurret'), st=G.selTurret||G.turrets[G.turrets.length-1];
   sb.textContent = st ? ('♻ 판매\n'+tdef(st).n+' 💰+'+Math.round((isLauncher(st)?CFG.launcherCost
