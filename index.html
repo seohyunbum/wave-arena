@@ -235,25 +235,41 @@ const CFG = {
   // (구매 횟수도 Lv1 환산 개수만큼 올라가므로, 사든 합치든 이후 가격 상승까지 동일하다)
   // turretMax = 보유 가능한 포탑 수 (자리는 고정되지 않고 어디든 자유 배치)
   turretMax:14, turretGap:26, turretEdge:22,   // 포탑끼리 최소 간격(겹쳐 파묻히는 것만 방지) / 맵 여백
-  turretCost0:110, turretCostMul:1.06, turretSellFrac:0.5, turretBuyPremium:1.15,
+  turretCost0:110, turretCostMul:1.03, turretSellFrac:0.5, turretBuyPremium:1.15,
   // style = 등급별 외형 / base·body·hh = 크기 / bl·bw·bn = 총열 길이·굵기·개수
   // 등급이 오를수록 연사가 크게 빨라진다 (초당 1.1발 → 8.3발, 7.5배)
   // 발당 피해는 낮추고 발수를 늘려 총 화력(DPS)은 기존 곡선을 유지
   turretTiers:[
-    {n:'목재 포탑',  dmg:17,  range:210, fire:0.90, col:'#a9743a', top:'#d0964e', style:'wood',
+    {n:'목재 포탑', dmg:17, range:210, fire:0.90, col:'#a9743a', top:'#d0964e', style:'wood',
      base:30, body:17, hh:15, bl:16, bw:5.0, bn:1},
-    {n:'석재 포탑',  dmg:31,  range:230, fire:0.70, col:'#8d949f', top:'#b8bfc9', style:'stone',
-     base:35, body:20, hh:20, bl:19, bw:6.0, bn:1},
-    {n:'강철 포탑',  dmg:56,  range:255, fire:0.54, col:'#6d7f96', top:'#9bb2cc', style:'steel',
-     base:39, body:22, hh:25, bl:23, bw:5.5, bn:2},
-    {n:'마법 포탑',  dmg:98,  range:280, fire:0.40, col:'#6d4bb0', top:'#a98bff', style:'magic',
-     base:43, body:24, hh:30, bl:25, bw:7.0, bn:1, splash:42},
-    {n:'화염 포탑',  dmg:160, range:300, fire:0.28, col:'#b8461c', top:'#ff8a3a', style:'flame',
-     base:47, body:26, hh:35, bl:28, bw:9.0, bn:1, splash:58, burn:3},
-    {n:'번개 포탑',  dmg:265, range:335, fire:0.19, col:'#2a6fa8', top:'#7fd4ff', style:'thunder',
-     base:51, body:28, hh:41, bl:30, bw:6.5, bn:3, splash:74, slow:3},
-    {n:'용의 포탑',  dmg:410, range:380, fire:0.12, col:'#7a1030', top:'#ff3b6b', style:'dragon',
-     base:56, body:31, hh:48, bl:34, bw:10.0, bn:2, splash:96, burn:4, slow:3},
+    {n:'석재 포탑', dmg:29, range:224, fire:0.78, col:'#8d949f', top:'#b8bfc9', style:'stone',
+     base:33, body:19, hh:19, bl:19, bw:5.8, bn:1},
+    {n:'강철 포탑', dmg:49, range:237, fire:0.68, col:'#6d7f96', top:'#9bb2cc', style:'steel',
+     base:35, body:20, hh:22, bl:21, bw:6.6, bn:2},
+    {n:'마법 포탑', dmg:82, range:251, fire:0.58, col:'#6d4bb0', top:'#a98bff', style:'magic',
+     base:38, body:22, hh:26, bl:24, bw:7.4, bn:2, splash:38},
+    {n:'화염 포탑', dmg:137, range:264, fire:0.50, col:'#b8461c', top:'#ff8a3a', style:'flame',
+     base:41, body:24, hh:30, bl:27, bw:8.1, bn:2, splash:44, burn:3},
+    {n:'번개 포탑', dmg:225, range:278, fire:0.42, col:'#2a6fa8', top:'#7fd4ff', style:'thunder',
+     base:44, body:25, hh:34, bl:30, bw:8.9, bn:3, splash:49, burn:3, slow:3},
+    {n:'용의 포탑', dmg:366, range:291, fire:0.35, col:'#7a1030', top:'#ff3b6b', style:'dragon',
+     base:46, body:27, hh:37, bl:32, bw:9.7, bn:3, splash:55, burn:3, slow:3},
+    {n:'수정 포탑', dmg:591, range:305, fire:0.29, col:'#125c6b', top:'#8ef0ff', style:'wood',
+     base:49, body:28, hh:41, bl:35, bw:10.5, bn:3, splash:61, burn:3, slow:3},
+    {n:'흑철 포탑', dmg:953, range:319, fire:0.24, col:'#2f2652', top:'#c9b6ff', style:'stone',
+     base:52, body:30, hh:45, bl:38, bw:11.3, bn:3, splash:66, burn:3, slow:3},
+    {n:'성역 포탑', dmg:1549, range:332, fire:0.20, col:'#6b551a', top:'#ffe9a3', style:'steel',
+     base:54, body:32, hh:48, bl:40, bw:12.1, bn:3, splash:72, burn:5, slow:4},
+    {n:'심연 포탑', dmg:2568, range:346, fire:0.17, col:'#3f1560', top:'#b06bff', style:'magic',
+     base:57, body:33, hh:52, bl:43, bw:12.9, bn:3, splash:77, burn:5, slow:4},
+    {n:'태양 포탑', dmg:4123, range:359, fire:0.14, col:'#6b4a08', top:'#ffd15c', style:'flame',
+     base:60, body:35, hh:56, bl:46, bw:13.6, bn:3, splash:83, burn:5, slow:4},
+    {n:'폭풍 포탑', dmg:6892, range:373, fire:0.12, col:'#0f5c45', top:'#7cf3c8', style:'thunder',
+     base:63, body:37, hh:60, bl:49, bw:14.4, bn:3, splash:89, burn:5, slow:4},
+    {n:'천공 포탑', dmg:12320, range:386, fire:0.11, col:'#1f4370', top:'#a3d8ff', style:'dragon',
+     base:65, body:38, hh:63, bl:51, bw:15.2, bn:3, splash:94, burn:5, slow:4},
+    {n:'창조 포탑', dmg:21839, range:400, fire:0.10, col:'#4a4f60', top:'#f2f7ff', style:'wood',
+     base:68, body:40, hh:67, bl:54, bw:16.0, bn:3, splash:100, burn:5, slow:4},
   ],
   turretSplashFrac:0.5,
   // ---- 에너지 병기 ----
@@ -280,11 +296,39 @@ const CFG = {
   // ---- 보스 (스테이지 5마다) ----
   bossEvery:5, bossHpMult:12, bossDmgMult:2.6, bossSpeedMult:0.72, bossRMult:2.4, bossReward:60, bossGoldBase:90,
   // ---- 상점 ----
-  defK:60, poisonFrac:0.06,                         // 방어력 경감 계수 / 독 초당 피해(최대체력 비율)
-  weapons:[{n:'맨손',dmg:0},{n:'목검',dmg:8,cost:40},{n:'철검',dmg:18,cost:110},
-           {n:'미스릴 검',dmg:35,cost:260},{n:'용검',dmg:60,cost:560}],
-  armors:[{n:'평상복',def:0},{n:'천 갑옷',def:15,cost:40},{n:'가죽 갑옷',def:35,cost:110},
-          {n:'판금 갑옷',def:70,cost:260},{n:'용 갑옷',def:120,cost:560}],
+  defK:60, defMaxCut:0.95, poisonFrac:0.06,   // 방어 경감 상한 95%                         // 방어력 경감 계수 / 독 초당 피해(최대체력 비율)
+  weapons:[{n:'맨손',dmg:0},
+           {n:'목검',dmg:8,cost:40},
+           {n:'단검',dmg:14,cost:94},
+           {n:'철검',dmg:24,cost:221},
+           {n:'강철검',dmg:43,cost:519},
+           {n:'미스릴 검',dmg:75,cost:1220},
+           {n:'용검',dmg:131,cost:2867},
+           {n:'성검',dmg:230,cost:6737},
+           {n:'마검',dmg:402,cost:15832},
+           {n:'뇌전검',dmg:704,cost:37205},
+           {n:'화염검',dmg:1231,cost:87432},
+           {n:'심연검',dmg:2155,cost:205465},
+           {n:'태양검',dmg:3771,cost:482844},
+           {n:'폭풍검',dmg:6600,cost:1134682},
+           {n:'천공검',dmg:11550,cost:2666504},
+           {n:'창조검',dmg:20213,cost:6266284}],
+  armors:[{n:'평상복',def:0},
+          {n:'천 갑옷',def:15,cost:40},   // 피해 경감 20%
+          {n:'가죽 갑옷',def:26,cost:78},   // 피해 경감 30%
+          {n:'사슬 갑옷',def:40,cost:152},   // 피해 경감 40%
+          {n:'판금 갑옷',def:60,cost:297},   // 피해 경감 50%
+          {n:'강철 갑옷',def:83,cost:578},   // 피해 경감 58%
+          {n:'미스릴 갑옷',def:111,cost:1128},   // 피해 경감 65%
+          {n:'용 갑옷',def:147,cost:2199},   // 피해 경감 71%
+          {n:'수정 갑옷',def:190,cost:4288},   // 피해 경감 76%
+          {n:'흑철 갑옷',def:240,cost:8363},   // 피해 경감 80%
+          {n:'성역 갑옷',def:315,cost:16307},   // 피해 경감 84%
+          {n:'심연 갑옷',def:402,cost:31798},   // 피해 경감 87%
+          {n:'태양 갑옷',def:540,cost:62007},   // 피해 경감 90%
+          {n:'폭풍 갑옷',def:690,cost:120914},   // 피해 경감 92%
+          {n:'천공 갑옷',def:940,cost:235782},   // 피해 경감 94%
+          {n:'창조 갑옷',def:1140,cost:459774}],   // 피해 경감 95%
   potionLinger:4,                                   // 물약 장 지속(초): 이 시간 동안 스폰되는 적도 확률 적용
   potionCostMul:1.16, dollCostMul:1.20,             // 소모품은 같은 종류를 살수록 비싸진다
   potions:[{key:'slow',n:'감속 물약',desc:'이속 -50%·5초',cost:30,prob:0.65},
@@ -858,20 +902,17 @@ function mergeFailMsg(a,b){
   if(a.tier!==b.tier) return '포탑은 같은 레벨끼리만 합체됩니다';
   return '최고 등급은 합체할 수 없습니다';
 }
-// Lv(n+1) 포탑 1대 = Lv1 포탑 2^n대 분량
+// Lv(n+1) 포탑 1대 = Lv1 포탑 2^n대 분량 (합체가 2개→1개이므로 가격도 단계마다 2배)
 function turretUnits(tier){ return Math.pow(2, tier||0); }
-// from번째 구매부터 units대를 이어서 살 때의 총액 (구매할수록 오르는 가격 반영)
-function unitsPrice(units, from){
-  const r=CFG.turretCostMul;
-  return CFG.turretCost0*Math.pow(r,from)*(Math.pow(r,units)-1)/(r-1);
-}
-// 등급별 가격 : "합체로 만들 때 드는 비용"과 같게 맞추고, 상위 등급에만 편의 프리미엄을 더한다
-// (Lv1은 기본 단위라 원가 그대로 → 상위 등급 직접 구매가 정확히 프리미엄만큼만 비싸진다)
 function turretPremium(tier){ return tier>0 ? CFG.turretBuyPremium : 1; }
+// 가격 = 기본가 x 2^단계 x 편의 프리미엄 x 구매횟수 상승
+//   합체로 만든 것과 직접 산 것의 값이 같아지고(같은 단계 2개 = 다음 단계 1개),
+//   Lv1부터 합체로 올라가면 프리미엄만큼(15%) 저렴하다
 function turretCost(tier){
-  return Math.round(unitsPrice(turretUnits(tier), G.turretsBought)*turretPremium(tier));
+  return Math.round(CFG.turretCost0*turretUnits(tier)*turretPremium(tier)
+                    *Math.pow(CFG.turretCostMul,G.turretsBought));
 }
-function turretBasePrice(tier){ return unitsPrice(turretUnits(tier),0)*turretPremium(tier); }
+function turretBasePrice(tier){ return CFG.turretCost0*turretUnits(tier)*turretPremium(tier); }
 // 그 자리에 놓을 수 있는지 : 맵 안 + 다른 포탑과 겹치지 않음 (길 위에도 놓을 수 있다)
 function canPlace(x,y,exclude){
   const m=CFG.turretEdge;
@@ -913,7 +954,7 @@ function buyTurret(tier){
   if(G.gold<cost) return;
   const s=spawnSpot();
   if(!s){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
-  G.gold-=cost; G.turretsBought+=turretUnits(tier);   // 합체 경로와 동일하게 환산 개수만큼 반영
+  G.gold-=cost; G.turretsBought++;
   G.turrets.push({tier, x:s.x, y:s.y, cd:Math.random()*0.4, shootFlash:0, aim:0, aimT:null});
   floatText(s.x,s.y,'🏰 '+CFG.turretTiers[tier].n+' 건설!','#8ad3ff');
   burst(s.x,s.y,CFG.turretTiers[tier].top,10);
@@ -1213,7 +1254,8 @@ function update(dt){
         else { e.atk-=dt; if(e.atk<=0){ e.atk=.8; e.atkPose=0.35;
           const ed=e.dmg*(e.weakT>0?0.5:1);              // 약화 = 공격력 절반
           const edef=t.def+(G.buffs.guardT>0?CFG.guardDef:0);          // 수호인형 = 추가 방어
-          const taken=ed*(1 - (edef>0 ? edef/(edef+CFG.defK) : 0));    // 방어력 경감
+          const cut=edef>0 ? Math.min(CFG.defMaxCut, edef/(edef+CFG.defK)) : 0;
+          const taken=ed*(1-cut);                                      // 방어력 경감(상한 95%)
           t.hp-=taken; damageNum(t.x,t.y,taken,'#ff8a97');
           if(t.hp<=0){ t.dead=true; burst(t.x,t.y,'#38e8b0',18); } } }
       }
