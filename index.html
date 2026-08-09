@@ -279,7 +279,7 @@ const CFG = {
   // 상위 레벨 직접 구매가 = 그 레벨을 합체로 만드는 데 드는 비용 x launcherBuyPremium
   // (구매 횟수도 Lv1 환산 개수만큼 올라가므로, 사든 합치든 이후 가격 상승까지 동일하다)
   // turretMax = 보유 가능한 포탑 수 (자리는 고정되지 않고 어디든 자유 배치)
-  turretMax:14, turretGap:26, turretEdge:22,   // 포탑끼리 최소 간격(겹쳐 파묻히는 것만 방지) / 맵 여백
+  turretMax:14, turretGap:5, turretEdge:14,    // 받침끼리 띄울 여유 간격 / 맵 가장자리 여백
   // 편의 프리미엄(x1.15)을 기본가에 녹여 두었다(110 -> 127).
   // 덕분에 모든 단계가 "기본가 x 2^단계" 하나의 식으로 완전히 동일하게 계산되고,
   // 같은 단계 2개를 합치든 다음 단계를 사든 값이 정확히 똑같다.
@@ -1039,37 +1039,43 @@ function turretCost(tier){
   return Math.round(CFG.turretCost0*turretUnits(tier)*Math.pow(CFG.turretCostMul,G.turretsBought));
 }
 function turretBasePrice(tier){ return CFG.turretCost0*turretUnits(tier); }
-// 그 자리에 놓을 수 있는지 : 맵 안 + 다른 포탑과 겹치지 않음 (길 위에도 놓을 수 있다)
-function canPlace(x,y,exclude){
-  const m=CFG.turretEdge;
+// 받침 크기 (겹침 판정 기준). 놓으려는 구조물의 정의 또는 등급으로 구한다.
+function baseSizeOf(t){ return t ? tdef(t).base : CFG.turretTiers[0].base; }
+// 그 자리에 놓을 수 있는지 : 맵 안 + 다른 구조물과 받침이 겹치지 않음 (길 위에는 놓을 수 있다)
+// 받침은 정사각형이므로 두 축 모두 겹칠 때만 실제로 겹친다(AABB 판정)
+function canPlace(x,y,exclude,size){
+  const half=(size||CFG.turretTiers[0].base)/2;
+  const m=CFG.turretEdge+half;
   if(x<m || y<m || x>WORLD.w-m || y>WORLD.h-m) return false;
   for(const t of G.turrets){
     if(t===exclude) continue;
-    if((t.x-x)**2+(t.y-y)**2 < CFG.turretGap*CFG.turretGap) return false;
+    const need=half + baseSizeOf(t)/2 + CFG.turretGap;      // 두 받침 반폭 + 여유
+    if(Math.abs(t.x-x)<need && Math.abs(t.y-y)<need) return false;
   }
   return true;
 }
-// 놓고 싶은 곳에 최대한 가까운 실제 배치 지점 (맵 밖이면 안으로 당기고, 겹치면 살짝 옆으로)
+// 놓고 싶은 곳에 최대한 가까운 실제 배치 지점 (맵 밖이면 안으로 당기고, 겹치면 옆으로 밀어냄)
 // → 어디에 놓든 실패하지 않는다
-function placeSpot(x,y,exclude){
-  const m=CFG.turretEdge;
+function placeSpot(x,y,exclude,size){
+  size=size||baseSizeOf(exclude);
+  const m=CFG.turretEdge+size/2;
   x=Math.max(m,Math.min(WORLD.w-m,x));
   y=Math.max(m,Math.min(WORLD.h-m,y));
-  if(canPlace(x,y,exclude)) return {x,y};
-  for(let r=6; r<=200; r+=6){                      // 드롭 지점 주변을 나선형으로 탐색
-    for(let a=0;a<12;a++){
-      const th=a*Math.PI/6 + r*0.35;
+  if(canPlace(x,y,exclude,size)) return {x,y};
+  for(let r=6; r<=320; r+=6){                      // 드롭 지점 주변을 나선형으로 탐색
+    for(let a=0;a<16;a++){
+      const th=a*Math.PI/8 + r*0.35;
       const nx=Math.max(m,Math.min(WORLD.w-m, x+Math.cos(th)*r));
       const ny=Math.max(m,Math.min(WORLD.h-m, y+Math.sin(th)*r));
-      if(canPlace(nx,ny,exclude)) return {x:nx,y:ny};
+      if(canPlace(nx,ny,exclude,size)) return {x:nx,y:ny};
     }
   }
   return null;
 }
-// 구매한 포탑이 처음 놓일 자리
-function spawnSpot(){
-  for(const s of TSPOTS){ if(canPlace(s.x,s.y,null)) return {x:s.x,y:s.y}; }
-  return placeSpot(TSPOTS[0].x, TSPOTS[0].y, null);
+// 구매한 구조물이 처음 놓일 자리
+function spawnSpot(size){
+  for(const s of TSPOTS){ if(canPlace(s.x,s.y,null,size)) return {x:s.x,y:s.y}; }
+  return placeSpot(TSPOTS[0].x, TSPOTS[0].y, null, size);
 }
 function buyTurret(tier){
   tier=Math.max(0,Math.min(CFG.turretTiers.length-1, tier|0));
@@ -1078,7 +1084,7 @@ function buyTurret(tier){
     floatText(baseNode().x,baseNode().y,'포탑은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
   const cost=turretCost(tier);
   if(G.gold<cost) return;
-  const s=spawnSpot();
+  const s=spawnSpot(CFG.turretTiers[tier].base);
   if(!s){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
   G.gold-=cost; G.turretsBought++;
   G.turrets.push({tier, x:s.x, y:s.y, cd:Math.random()*0.4, shootFlash:0, aim:0, aimT:null});
@@ -1109,7 +1115,8 @@ function buyLauncher(tier){
   if(G.turrets.length>=CFG.turretMax){
     floatText(baseNode().x,baseNode().y,'구조물은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
   const cost=launcherCost(tier); if(G.gold<cost) return;
-  const s=spawnSpot(); if(!s){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
+  const s=spawnSpot(CFG.launcherTiers[tier].base);
+  if(!s){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
   G.gold-=cost; G.launchersBought+=launcherUnits(tier);   // 합체 경로와 동일하게 환산
   G.turrets.push({kind:'launcher', tier, x:s.x, y:s.y, cd:0, shootFlash:0, aim:0, aimT:null, coilT:0});
   floatText(s.x,s.y,'⚡ '+CFG.launcherTiers[tier].n+' 설치!','#5ce1ff');
@@ -1147,6 +1154,10 @@ function mergeTurrets(src,dst){
   dst.tier=r; dst.cd=0;
   if(nrg) dst.coilT=coilDurOf(dst);                         // 코일을 넣었으니 완충 상태로 나온다
   G.turrets=G.turrets.filter(t=>t!==src);
+  if(!canPlace(dst.x,dst.y,dst,tdef(dst).base)){            // 합체로 받침이 커져 겹치면 옆으로 밀어냄
+    const sp=placeSpot(dst.x,dst.y,dst,tdef(dst).base);
+    if(sp){ dst.x=sp.x; dst.y=sp.y; }
+  }
   G.selTurret=null;
   floatText(dst.x,dst.y,'✨ '+tdef(dst).n+(nrg?' (코일 '+Math.round(dst.coilT)+'초)':' Lv'+(dst.tier+1))+'!',
             nrg?'#7cf3ff':'#ffd166');
