@@ -28,6 +28,7 @@
   #shopBtn{background:#a78bfa; color:#160b2e}
   #rotBtn{background:#2b3552; color:var(--text)}
   #mapBtn{background:#4f9b6b; color:#04121a}
+  #saveBtn{background:#c9a227; color:#1a1200}
   button:disabled{opacity:.4; cursor:default}
   canvas{flex:1; display:block; width:100%; touch-action:none}
   #hud,#over,#shop{-webkit-user-select:none; user-select:none; -webkit-touch-callout:none}
@@ -78,7 +79,7 @@
   .thint{font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5}
   .pots{display:grid; grid-template-columns:1fr 1fr; gap:6px}
   .pots .buy{font-size:12.5px; padding:8px 12px; line-height:1.25}
-  #maps{position:absolute; inset:0; display:none; place-items:center; z-index:12;
+  #maps,#saves{position:absolute; inset:0; display:none; place-items:center; z-index:12;
     background:rgba(6,10,22,.86); backdrop-filter:blur(3px); padding:14px}
   .maplist{display:grid; grid-template-columns:1fr 1fr; gap:8px}
   .mapopt{background:#243052; border:2px solid #2b3552; border-radius:12px; padding:8px; cursor:pointer;
@@ -104,6 +105,7 @@
     <div class="spacer"></div>
     <span class="tag" id="next">다음 아군 0/5</span>
     <span class="tag" id="buffs"></span>
+    <button id="saveBtn">💾 저장</button>
     <button id="mapBtn">🗺 길</button>
     <button id="rotBtn" title="화면 회전">🔄 회전</button>
     <button id="shopBtn">상점</button>
@@ -125,7 +127,29 @@
       <div class="recrow"><span>⭐ 최고 난이도</span><b id="bL">Lv0</b></div>
     </div>
     <div class="runs" id="oRuns"></div>
-    <p style="margin-top:14px"><button id="again" style="background:#38e8b0">다시 시작</button></p>
+    <p style="margin-top:14px">
+      <button id="revive" style="background:#7cf3ff; display:none; margin-bottom:6px"></button><br>
+      <button id="again" style="background:#38e8b0">처음부터 다시</button>
+    </p>
+  </div>
+</div>
+<div id="saves">
+  <div class="scard">
+    <div class="shead">
+      <h2>저장 / 불러오기</h2>
+      <button id="savesClose">닫기</button>
+    </div>
+    <div class="ssec" style="border-top:0">
+      <div class="pots">
+        <button id="doSave" class="buy" style="background:#1f6b4a"></button>
+        <button id="doLoad" class="buy" style="background:#243052"></button>
+      </div>
+      <div class="pots" style="margin-top:6px">
+        <button id="doDelete" class="buy" style="background:#5b2130"></button>
+      </div>
+      <div class="thint" id="saveInfo"></div>
+      <div class="thint" id="cpInfo"></div>
+    </div>
   </div>
 </div>
 <div id="maps">
@@ -230,6 +254,7 @@ const CFG = {
   stageBonusBase:15, stageBonusPerLv:14,                   // 새 스테이지 도달 시 보너스 골드
   // ---- 끝내기 쿨타임 ----
   stopCooldown:60,
+  checkpointEvery:50,                           // 난이도 50 간격으로 세이브포인트
   // ---- 포탑 ----
   // 상위 등급 직접 구매가 = 그 등급을 합체로 만드는 데 드는 비용 x turretBuyPremium
   // (구매 횟수도 Lv1 환산 개수만큼 올라가므로, 사든 합치든 이후 가격 상승까지 동일하다)
@@ -793,6 +818,7 @@ const G = {
   allies:[], enemies:[], shots:[], fx:[], nums:[], beams:[],
   turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1, anim:0, dropInfo:null,
   launchersBought:0, coilsUsed:0, pathIndex:0, potBought:{}, dollBought:{},
+  lastCp:null, cpList:[],
 };
 
 // ---- 기록(하이스코어) : localStorage 영속 ----
@@ -863,7 +889,84 @@ function reset(){
   G.turrets=[]; G.turretsBought=0; G.selTurret=null; G.stopCd=0; G.maxLevelSeen=1;
   G.launchersBought=0; G.coilsUsed=0; G.potBought={}; G.dollBought={};
   G.allies=[]; for(let i=0;i<CFG.allyStart;i++) G.allies.push(newAlly());
+  G.lastCp=null; G.cpList=[];
   layoutAllies();
+}
+
+// ================= 저장 / 불러오기 / 세이브포인트 =================
+const SAVE_KEY='wavearena_save_v1';
+// 현재 판을 통째로 담는다 (적·발사체는 저장하지 않고 재개 시 새로 몰려온다)
+function snapshot(){
+  return {
+    v:2, at:Date.now(),
+    time:G.time, kills:G.kills, gold:G.gold, level:G.level,
+    upTotal:G.upTotal, upToward:G.upToward, weaponTier:G.weaponTier, armorTier:G.armorTier,
+    pathIndex:G.pathIndex, maxLevelSeen:G.maxLevelSeen, levelOffset:G.levelOffset,
+    nextBossLevel:G.nextBossLevel, stopCd:G.stopCd,
+    turretsBought:G.turretsBought, launchersBought:G.launchersBought, coilsUsed:G.coilsUsed,
+    potBought:Object.assign({},G.potBought), dollBought:Object.assign({},G.dollBought),
+    buffs:Object.assign({},G.buffs),
+    allies:G.allies.map(a=>({hp:a.hp, dead:a.dead})),
+    turrets:G.turrets.map(t=>({kind:t.kind||'turret', tier:t.tier, x:t.x, y:t.y, coilT:t.coilT||0})),
+    cpList:G.cpList.slice(), lastCp:G.lastCp
+  };
+}
+function restore(s){
+  if(!s) return false;
+  if(s.pathIndex!==undefined && s.pathIndex!==G.pathIndex){   // 길이 다르면 맵부터 다시 만든다
+    G.pathIndex=s.pathIndex; setPath(G.pathIndex);
+    TSPOTS=buildTurretSlots(); buildDecor(G.pathIndex); fitCamera(); buildGround();
+  }
+  reset();
+  G.time=s.time||0; G.kills=s.kills||0; G.gold=s.gold||0;
+  G.upTotal=s.upTotal||0; G.upToward=s.upToward||0;
+  G.weaponTier=s.weaponTier||0; G.armorTier=s.armorTier||0;
+  G.maxLevelSeen=s.maxLevelSeen||1; G.levelOffset=s.levelOffset||0;
+  G.nextBossLevel=s.nextBossLevel||CFG.bossEvery; G.stopCd=s.stopCd||0;
+  G.turretsBought=s.turretsBought||0; G.launchersBought=s.launchersBought||0; G.coilsUsed=s.coilsUsed||0;
+  G.potBought=Object.assign({},s.potBought||{}); G.dollBought=Object.assign({},s.dollBought||{});
+  if(s.buffs){ G.buffs.rageT=s.buffs.rageT||0; G.buffs.luckT=s.buffs.luckT||0; G.buffs.guardT=s.buffs.guardT||0; }
+  G.level=Math.max(1, levelFor(G.time)-G.levelOffset);
+  // 아군 : 강화·장비를 먼저 반영한 뒤 인원과 체력을 되살린다
+  G.allies=[]; const n=Math.max(1,(s.allies||[]).length||CFG.allyStart);
+  for(let i=0;i<n;i++) G.allies.push(newAlly());
+  layoutAllies(); applyAllyStats();
+  (s.allies||[]).forEach((a,i)=>{ if(!G.allies[i]) return;
+    G.allies[i].dead=!!a.dead; G.allies[i].hp=Math.min(G.allies[i].maxHp, a.hp||G.allies[i].maxHp); });
+  // 구조물
+  G.turrets=(s.turrets||[]).map(t=>({
+    kind:t.kind==='launcher'?'launcher':undefined, tier:t.tier|0, x:t.x, y:t.y,
+    cd:0, shootFlash:0, aim:0, aimT:null, coilT:t.coilT||0 }));
+  G.cpList=(s.cpList||[]).slice(); G.lastCp=s.lastCp||null;
+  G.phase='paused'; G.selTurret=null;
+  updateHUD();
+  return true;
+}
+function saveGame(){
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot())); return true; }
+  catch(e){ return false; }
+}
+function loadSaved(){ try{ return JSON.parse(localStorage.getItem(SAVE_KEY)); }catch(e){ return null; } }
+function deleteSave(){ try{ localStorage.removeItem(SAVE_KEY); }catch(e){} }
+
+// ---- 세이브포인트 : 난이도 50 간격 (50,100,150,...) ----
+function checkpointAt(level){
+  G.lastCp=snapshot();
+  if(G.cpList.indexOf(level)<0) G.cpList.push(level);
+  G.lastCp.cpList=G.cpList.slice();
+  saveGame();                                      // 세이브포인트마다 자동 저장
+  const b=baseNode();
+  floatText(b.x,b.y,'🚩 세이브포인트 Lv'+level+' (자동 저장)','#7cf3ff');
+  burst(b.x,b.y,'#7cf3ff',20);
+}
+function reviveAtCheckpoint(){
+  if(!G.lastCp) return;
+  const lv=G.lastCp.maxLevelSeen;
+  restore(G.lastCp);
+  document.getElementById('over').style.display='none';
+  const b=baseNode();
+  floatText(b.x,b.y,'🚩 Lv'+Math.floor(lv/CFG.checkpointEvery)*CFG.checkpointEvery+' 세이브포인트에서 부활!','#38e8b0');
+  burst(b.x,b.y,'#38e8b0',24);
 }
 // ---- 포탑 ----
 // 구조물 정의 : 일반 포탑은 등급표, 에너지 발사기는 전용 정의를 쓴다
@@ -1147,6 +1250,7 @@ function update(dt){
                   *(G.buffs.luckT>0?CFG.luckMult:1);
       G.gold+=bonus;
       const b=baseNode(); floatText(b.x,b.y,'스테이지 '+G.maxLevelSeen+' 💰+'+bonus,'#ffd166');
+      if(G.maxLevelSeen%CFG.checkpointEvery===0) checkpointAt(G.maxLevelSeen);   // 50 간격 세이브포인트
     }
     while(G.level>=G.nextBossLevel){ spawnBoss(); G.nextBossLevel+=CFG.bossEvery; }  // 5스테이지마다 보스
     G.spawnTimer-=dt;                                   // 적이 상한만큼 쌓였으면 잠시 스폰 중단
@@ -1570,6 +1674,13 @@ function endGame(){ G.phase='over';
   document.getElementById('oNew').className='newrec'+(isNew?' show':'');
   document.getElementById('oRuns').innerHTML='<b>최고 기록 TOP 5</b>'+
     RECORDS.runs.map((r,i)=>'<div>'+(i+1)+'. ⏱'+r.t.toFixed(0)+'초 · 💀'+r.k+' · ⭐Lv'+r.lv+'</div>').join('');
+  // 세이브포인트가 있으면 그곳에서 부활할 수 있다
+  const rv=document.getElementById('revive');
+  if(G.lastCp){
+    const cp=Math.floor((G.lastCp.maxLevelSeen||0)/CFG.checkpointEvery)*CFG.checkpointEvery;
+    rv.textContent='🚩 Lv'+cp+' 세이브포인트에서 부활';
+    rv.style.display='inline-block';
+  } else rv.style.display='none';
   document.getElementById('over').style.display='grid'; }
 
 // ---- 상점 ----
@@ -1831,6 +1942,50 @@ cv.addEventListener('pointercancel', ()=>{
   if(dragT&&dragOn&&dragFrom){ dragT.x=dragFrom.x; dragT.y=dragFrom.y; }
   dragT=null; dragOn=false; G.dropInfo=null;
 });
+
+// ---- 저장 / 불러오기 화면 ----
+function fmtWhen(ms){
+  const d=new Date(ms), z=n=>String(n).padStart(2,'0');
+  return (d.getMonth()+1)+'/'+d.getDate()+' '+z(d.getHours())+':'+z(d.getMinutes());
+}
+function updateSaves(){
+  const sv=loadSaved();
+  const ds=document.getElementById('doSave'), dl=document.getElementById('doLoad'), dd=document.getElementById('doDelete');
+  ds.textContent='💾 지금 저장하기\n난이도 Lv'+G.level+' · 골드 '+Math.floor(G.gold).toLocaleString();
+  ds.style.whiteSpace='pre-line'; ds.disabled=(G.phase==='over');
+  if(sv){
+    dl.textContent='📂 불러오기\nLv'+(sv.maxLevelSeen||1)+' · '+Math.floor(sv.gold||0).toLocaleString()+'골드 · '+fmtWhen(sv.at);
+    dl.disabled=false; dd.textContent='🗑 저장 삭제'; dd.disabled=false;
+  } else {
+    dl.textContent='📂 불러오기\n저장된 기록 없음'; dl.disabled=true;
+    dd.textContent='🗑 저장 삭제\n없음'; dd.disabled=true;
+  }
+  dl.style.whiteSpace='pre-line'; dd.style.whiteSpace='pre-line';
+  document.getElementById('saveInfo').textContent = sv
+    ? '저장한 판을 그대로 이어서 합니다(적은 새로 몰려옵니다). 세이브포인트에 도달하면 자동으로도 저장됩니다.'
+    : '아직 저장된 판이 없습니다. 세이브포인트(난이도 '+CFG.checkpointEvery+' 간격)에 도달하면 자동 저장됩니다.';
+  const done=(sv&&sv.cpList||G.cpList||[]);
+  document.getElementById('cpInfo').textContent =
+    '🚩 세이브포인트 : 난이도 '+CFG.checkpointEvery+' 간격 (50·100·150·200·250·300…) — '
+    + (done.length ? '도달함 Lv'+done.join(', Lv') : '아직 도달한 곳 없음')
+    + ' · 기지가 함락되면 마지막 세이브포인트에서 부활할 수 있습니다.';
+}
+function openSaves(){ updateSaves(); document.getElementById('saves').style.display='grid'; }
+function closeSaves(){ document.getElementById('saves').style.display='none'; }
+document.getElementById('saveBtn').onclick=openSaves;
+document.getElementById('savesClose').onclick=closeSaves;
+document.getElementById('doSave').onclick=()=>{
+  const ok=saveGame(); const b=baseNode();
+  floatText(b.x,b.y, ok?'💾 저장 완료':'저장 실패(브라우저 저장공간)', ok?'#38e8b0':'#ff8a97');
+  updateSaves();
+};
+document.getElementById('doLoad').onclick=()=>{
+  const sv=loadSaved(); if(!sv) return;
+  if(restore(sv)){ closeSaves();
+    const b=baseNode(); floatText(b.x,b.y,'📂 불러왔습니다 — "재개"를 누르세요','#8ad3ff'); }
+};
+document.getElementById('doDelete').onclick=()=>{ deleteSave(); updateSaves(); };
+document.getElementById('revive').onclick=reviveAtCheckpoint;
 
 // ---- 길 고르기 ----
 function drawMapPreview(cv2, m, on){                 // 미니 경로 미리보기
