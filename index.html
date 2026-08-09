@@ -265,7 +265,7 @@ const CFG = {
   goldStart:10, cost0:15, costMul:1.28,
   eHp0:38, eSpd0:54, eDmg0:9, eR0:13,          // 적 기본 스탯 (상향)
   eHpScale:0.50, eSpdScale:0.06, eDmgScale:0.30, // 레벨당 선형 증가폭
-  eHpGeo:1.05, eDmgGeo:1.04, eSpdCap:2.4,       // 후반 기하급수 성장(HP/공격력) + 속도 상한
+  eHpGeo:1.055, eDmgGeo:1.045, eSpdCap:2.4,     // 후반 기하급수 성장(HP/공격력) + 속도 상한
   spawnBase:1.05, spawnFloor:0.22, spawnStep:0.08, // 스폰: 더 촘촘하게
   enemyMax:60,                                  // 동시 생존 적 수 상한(넘으면 스폰 멈춤 → 렉/메모리 폭주 방지)
   levelSec:8,
@@ -319,7 +319,7 @@ const CFG = {
     {n:'창조 포탑', dmg:21839, range:400, fire:0.10, col:'#4a4f60', top:'#f2f7ff', style:'wood',
      base:68, body:40, hh:67, bl:54, bw:16.0, bn:3, splash:100, burn:5, slow:4},
   ],
-  turretSplashFrac:0.5,
+  turretSplashFrac:0.4,
   // ---- 에너지 병기 ----
   // 코일을 넣으면 일정 시간 동안 자동 발사, 맞으면 무엇이든 즉시 소멸
   // 합체 규칙이 포탑과 다르다 : 레벨이 더해진다 (Lv1+Lv1=Lv2, Lv2+Lv1=Lv3, Lv2+Lv2=Lv4)
@@ -345,7 +345,7 @@ const CFG = {
   bossLogDur:9, bossFloatLife:4,                 // 보스 보상 창 표시(초) / 떠오르는 글자 지속(초)
   bossEvery:5, bossHpMult:12, bossDmgMult:2.6, bossSpeedMult:0.72, bossRMult:2.4, bossReward:60, bossGoldBase:90,
   // ---- 상점 ----
-  defK:60, defMaxCut:0.95, poisonFrac:0.06,   // 방어 경감 상한 95%                         // 방어력 경감 계수 / 독 초당 피해(최대체력 비율)
+  defK:60, defMaxCut:0.95, poisonFrac:0.025,  // 방어 경감 상한 95% / 독 초당 피해(최대체력 비율)                         // 방어력 경감 계수 / 독 초당 피해(최대체력 비율)
   weapons:[{n:'맨손',dmg:0},
            {n:'목검',dmg:8,cost:40},
            {n:'단검',dmg:14,cost:94},
@@ -386,7 +386,9 @@ const CFG = {
            {key:'freeze',n:'빙결 물약',desc:'완전 정지·3초',cost:130,prob:0.50},
            {key:'heal',n:'치유 물약',desc:'아군 전체 HP 60% 회복',cost:90,type:'heal',healFrac:0.6}],
   // ---- 인형(부적) : 포션보다 강력한 상위 아이템 ----
-  burnFrac:0.095, burnDur:5,                         // 화상 초당 피해(최대체력 비율)·지속
+  burnFrac:0.03, burnDur:4,                          // 화상 초당 피해(최대체력 비율)·지속
+  //  ↑ 화상·독은 적 최대 체력의 비율로 들어가 난이도를 무시하므로 낮게 유지한다
+  //    (예전 9.5%x5초 = 한 번에 47.5% 삭제 → 적 HP가 아무리 커도 두 번이면 즉사)
   reviveFrac:0.4, curseFrac:0.33, freezeDollDur:3.2, // 부활 회복률·저주 즉발피해율·빙결인형 지속
   healDollFrac:0.8,                                  // 치유인형 회복률(완전회복 → 80%)
   rageDur:8, rageDmg:1.5, rageFire:0.65,             // 분노: 지속·공격력배율·공격간격배율(↓=빠름)
