@@ -179,7 +179,7 @@
       <button id="buyArmor" class="buy"></button>
     </div>
     <div class="ssec">
-      <h3>포션 <small>적 물약=확률 디버프(4초 지속) · 치유=아군 회복</small></h3>
+      <h3>포션 <small>적 물약=확률 디버프(4초 지속) · 치유=아군 회복 · 같은 물약은 살수록 비싸짐</small></h3>
       <div class="pots">
         <button id="buyPot_slow" class="buy"></button>
         <button id="buyPot_poison" class="buy"></button>
@@ -189,7 +189,7 @@
       </div>
     </div>
     <div class="ssec">
-      <h3>인형 <small>강력한 1회성 부적 · 즉시 발동</small></h3>
+      <h3>인형 <small>강력한 1회성 부적 · 즉시 발동 · 같은 인형은 살수록 비싸짐</small></h3>
       <div class="pots">
         <button id="buyDoll_revive" class="buy doll"></button>
         <button id="buyDoll_heal" class="buy doll"></button>
@@ -271,6 +271,7 @@ const CFG = {
   armors:[{n:'평상복',def:0},{n:'천 갑옷',def:15,cost:40},{n:'가죽 갑옷',def:35,cost:110},
           {n:'판금 갑옷',def:70,cost:260},{n:'용 갑옷',def:120,cost:560}],
   potionLinger:4,                                   // 물약 장 지속(초): 이 시간 동안 스폰되는 적도 확률 적용
+  potionCostMul:1.16, dollCostMul:1.20,             // 소모품은 같은 종류를 살수록 비싸진다
   potions:[{key:'slow',n:'감속 물약',desc:'이속 -50%·5초',cost:30,prob:0.65},
            {key:'poison',n:'독 물약',desc:'지속 피해·6초',cost:55,prob:0.70},
            {key:'weak',n:'약화 물약',desc:'공격력 -50%·6초',cost:70,prob:0.60},
@@ -732,7 +733,7 @@ const G = {
   weaponTier:0, armorTier:0, shopOpen:false, potionField:[], buffs:{rageT:0,luckT:0,guardT:0},
   allies:[], enemies:[], shots:[], fx:[], nums:[], beams:[],
   turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1, anim:0, dropInfo:null,
-  launchersBought:0, coilsUsed:0, pathIndex:0,
+  launchersBought:0, coilsUsed:0, pathIndex:0, potBought:{}, dollBought:{},
 };
 
 // ---- 기록(하이스코어) : localStorage 영속 ----
@@ -801,7 +802,7 @@ function reset(){
   G.weaponTier=0; G.armorTier=0; G.shopOpen=false; G.potionField.length=0;
   G.levelOffset=0; G.buffs.rageT=0; G.buffs.luckT=0; G.buffs.guardT=0;
   G.turrets=[]; G.turretsBought=0; G.selTurret=null; G.stopCd=0; G.maxLevelSeen=1;
-  G.launchersBought=0; G.coilsUsed=0;
+  G.launchersBought=0; G.coilsUsed=0; G.potBought={}; G.dollBought={};
   G.allies=[]; for(let i=0;i<CFG.allyStart;i++) G.allies.push(newAlly());
   layoutAllies();
 }
@@ -1494,16 +1495,16 @@ function updateShop(){
   if(an){ ba.textContent='▶ '+an.n+'  (방어 '+an.def+')   💰'+an.cost; ba.disabled=G.gold<an.cost; }
   else { ba.textContent='최고 등급 달성'; ba.disabled=true; }
   for(const p of CFG.potions){
-    const b=document.getElementById('buyPot_'+p.key);
-    b.textContent=p.n+'\n'+p.desc+' · 💰'+p.cost;
+    const b=document.getElementById('buyPot_'+p.key), c=potionCost(p.key), n=G.potBought[p.key]||0;
+    b.textContent=p.n+(n?' ×'+n:'')+'\n'+p.desc+' · 💰'+c.toLocaleString();
     b.style.whiteSpace='pre-line';
-    b.disabled=G.gold<p.cost;
+    b.disabled=G.gold<c;
   }
   for(const d of CFG.dolls){
-    const b=document.getElementById('buyDoll_'+d.key);
-    b.textContent=d.n+'\n'+d.desc+' · 💰'+d.cost;
+    const b=document.getElementById('buyDoll_'+d.key), c=dollCost(d.key), n=G.dollBought[d.key]||0;
+    b.textContent=d.n+(n?' ×'+n:'')+'\n'+d.desc+' · 💰'+c.toLocaleString();
     b.style.whiteSpace='pre-line';
-    b.disabled=G.gold<d.cost;
+    b.disabled=G.gold<c;
   }
 }
 function buyWeapon(){ const w=CFG.weapons[G.weaponTier+1]; if(!w||G.gold<w.cost) return;
@@ -1512,6 +1513,15 @@ function buyWeapon(){ const w=CFG.weapons[G.weaponTier+1]; if(!w||G.gold<w.cost)
 function buyArmor(){ const a=CFG.armors[G.armorTier+1]; if(!a||G.gold<a.cost) return;
   G.gold-=a.cost; G.armorTier++; applyAllyStats();
   floatText(baseNode().x,baseNode().y,a.n+' 장착!','#8ad3ff'); updateShop(); }
+// 소모품 가격 : 같은 종류를 살수록 상승
+function potionCost(key){
+  const p=CFG.potions.find(x=>x.key===key); if(!p) return 0;
+  return Math.round(p.cost*Math.pow(CFG.potionCostMul, G.potBought[key]||0));
+}
+function dollCost(key){
+  const d=CFG.dolls.find(x=>x.key===key); if(!d) return 0;
+  return Math.round(d.cost*Math.pow(CFG.dollCostMul, G.dollBought[key]||0));
+}
 function applyPotion(e,key){
   if(key==='slow') e.slowT=Math.max(e.slowT,5);
   else if(key==='poison') e.poisonT=Math.max(e.poisonT,6);
@@ -1519,8 +1529,10 @@ function applyPotion(e,key){
   else if(key==='freeze') e.freezeT=Math.max(e.freezeT,3);
 }
 function buyPotion(key){
-  const p=CFG.potions.find(x=>x.key===key); if(!p||G.gold<p.cost) return;
-  G.gold-=p.cost; const b=baseNode();
+  const p=CFG.potions.find(x=>x.key===key); if(!p) return;
+  const cost=potionCost(key); if(G.gold<cost) return;
+  G.gold-=cost; G.potBought[key]=(G.potBought[key]||0)+1;
+  const b=baseNode();
   if(p.type==='heal'){                                                                   // 치유 물약: 살아있는 아군 회복
     let n=0; for(const a of G.allies){ if(a.dead) continue; a.hp=Math.min(a.maxHp, a.hp+a.maxHp*p.healFrac); n++; }
     floatText(b.x,b.y, p.n+' → 아군 '+n+'명 회복!', '#7CFC00'); updateShop(); return;
@@ -1532,8 +1544,10 @@ function buyPotion(key){
   updateShop();
 }
 function buyDoll(key){
-  const d=CFG.dolls.find(x=>x.key===key); if(!d||G.gold<d.cost) return;
-  G.gold-=d.cost; const b=baseNode();
+  const d=CFG.dolls.find(x=>x.key===key); if(!d) return;
+  const cost=dollCost(key); if(G.gold<cost) return;
+  G.gold-=cost; G.dollBought[key]=(G.dollBought[key]||0)+1;
+  const b=baseNode();
   if(key==='revive'){ let n=0; for(const a of G.allies){ if(a.dead){ a.dead=false; a.hp=a.maxHp*CFG.reviveFrac; n++; } }
     layoutAllies(); floatText(b.x,b.y,'부활인형 → '+n+'명 부활!','#8ad3ff'); }
   else if(key==='heal'){ for(const a of G.allies){ if(!a.dead) a.hp=a.maxHp; } floatText(b.x,b.y,'치유인형 → 전원 완전회복!','#7CFC00'); }
@@ -1603,7 +1617,7 @@ function turretAt(mx,my,exclude){
     if(d<bd){ bd=d; hit=t; }
   }
   if(hit) return hit;
-  let bd2=44*44;                                         // 못 맞혔으면 가까운 포탑을 관대하게
+  let bd2=44*44;                                         // 못 맞혔으면 가까운 구조물을 관대하게
   for(const t of G.turrets){
     if(t===exclude) continue;
     const b=turretHitBox(t);
