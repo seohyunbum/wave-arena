@@ -194,7 +194,7 @@
       <button id="shopClose">닫기</button>
     </div>
     <div class="ssec">
-      <h3>포탑 <small>상위 등급 값 = 합체로 만들 때와 같은 비용 +15% (사든 합치든 손해 없음)</small></h3>
+      <h3>포탑 <small>전 단계가 같은 계산식 — 합쳐서 만들든 그냥 사든 값이 완전히 같습니다</small></h3>
       <div class="pots" id="turBuyGrid"></div>
       <div class="pots" style="margin-top:6px">
         <button id="mergeTurret" class="buy merge"></button>
@@ -276,11 +276,14 @@ const CFG = {
   stopCooldown:60,
   checkpointEvery:50,                           // 난이도 50 간격으로 세이브포인트
   // ---- 포탑 ----
-  // 상위 등급 직접 구매가 = 그 등급을 합체로 만드는 데 드는 비용 x turretBuyPremium
+  // 상위 레벨 직접 구매가 = 그 레벨을 합체로 만드는 데 드는 비용 x launcherBuyPremium
   // (구매 횟수도 Lv1 환산 개수만큼 올라가므로, 사든 합치든 이후 가격 상승까지 동일하다)
   // turretMax = 보유 가능한 포탑 수 (자리는 고정되지 않고 어디든 자유 배치)
   turretMax:14, turretGap:26, turretEdge:22,   // 포탑끼리 최소 간격(겹쳐 파묻히는 것만 방지) / 맵 여백
-  turretCost0:110, turretCostMul:1.03, turretSellFrac:0.5, turretBuyPremium:1.15,
+  // 편의 프리미엄(x1.15)을 기본가에 녹여 두었다(110 -> 127).
+  // 덕분에 모든 단계가 "기본가 x 2^단계" 하나의 식으로 완전히 동일하게 계산되고,
+  // 같은 단계 2개를 합치든 다음 단계를 사든 값이 정확히 똑같다.
+  turretCost0:127, turretCostMul:1.03, turretSellFrac:0.5,
   // style = 등급별 외형 / base·body·hh = 크기 / bl·bw·bn = 총열 길이·굵기·개수
   // 등급이 오를수록 연사가 크게 빨라진다 (초당 1.1발 → 8.3발, 7.5배)
   // 발당 피해는 낮추고 발수를 늘려 총 화력(DPS)은 기존 곡선을 유지
@@ -1028,17 +1031,14 @@ function mergeFailMsg(a,b){
   if(a.tier!==b.tier) return '포탑은 같은 레벨끼리만 합체됩니다';
   return '최고 등급은 합체할 수 없습니다';
 }
-// Lv(n+1) 포탑 1대 = Lv1 포탑 2^n대 분량 (합체가 2개→1개이므로 가격도 단계마다 2배)
+// Lv(n+1) 포탑 1대 = Lv1 포탑 2^n대 분량 (합체가 2개→1개이므로 가격도 단계마다 정확히 2배)
 function turretUnits(tier){ return Math.pow(2, tier||0); }
-function turretPremium(tier){ return tier>0 ? CFG.turretBuyPremium : 1; }
-// 가격 = 기본가 x 2^단계 x 편의 프리미엄 x 구매횟수 상승
-//   합체로 만든 것과 직접 산 것의 값이 같아지고(같은 단계 2개 = 다음 단계 1개),
-//   Lv1부터 합체로 올라가면 프리미엄만큼(15%) 저렴하다
+// 가격 = 기본가 x 2^단계 x 구매횟수 상승  — 전 단계가 완전히 같은 식
+//   Lv1부터 합체로 올라가든, 아래 단계 2개를 합치든, 그냥 사든 총액이 동일하다
 function turretCost(tier){
-  return Math.round(CFG.turretCost0*turretUnits(tier)*turretPremium(tier)
-                    *Math.pow(CFG.turretCostMul,G.turretsBought));
+  return Math.round(CFG.turretCost0*turretUnits(tier)*Math.pow(CFG.turretCostMul,G.turretsBought));
 }
-function turretBasePrice(tier){ return CFG.turretCost0*turretUnits(tier)*turretPremium(tier); }
+function turretBasePrice(tier){ return CFG.turretCost0*turretUnits(tier); }
 // 그 자리에 놓을 수 있는지 : 맵 안 + 다른 포탑과 겹치지 않음 (길 위에도 놓을 수 있다)
 function canPlace(x,y,exclude){
   const m=CFG.turretEdge;
