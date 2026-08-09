@@ -163,9 +163,10 @@
         탭으로 고른 뒤 원하는 곳을 탭해도 옮겨집니다.</div>
     </div>
     <div class="ssec">
-      <h3>에너지 병기 <small>합체 불가 · 코일을 넣으면 60초간 초당 1발, 무엇이든 한 방</small></h3>
-      <div class="pots">
-        <button id="buyLauncher" class="buy nrg"></button>
+      <h3>에너지 병기 <small>코일을 넣으면 일정 시간 자동 발사, 맞으면 무엇이든 한 방 ·
+        합체는 레벨이 더해짐(Lv1+Lv1=Lv2, Lv2+Lv1=Lv3)</small></h3>
+      <div class="pots" id="nrgBuyGrid"></div>
+      <div class="pots" style="margin-top:6px">
         <button id="buyCoil" class="buy coil"></button>
       </div>
       <div class="thint" id="nrgInfo"></div>
@@ -255,13 +256,25 @@ const CFG = {
      base:56, body:31, hh:48, bl:34, bw:10.0, bn:2, splash:96, burn:4, slow:3},
   ],
   turretSplashFrac:0.5,
-  // ---- 에너지 병기 : 합체되지 않는 특수 구조물 ----
-  // 에너지 코일을 넣으면 60초간 초당 1발, 맞으면 무엇이든 즉시 소멸
-  launcher:{n:'에너지 발사기', range:520, fire:1.0, col:'#16365c', top:'#5ce1ff',
-            base:58, body:30, hh:46, bl:36, bw:12, bn:1, style:'energy'},
-  launcherCost:180000, launcherCostMul:1.7,     // 발사기(구조물) : 살수록 비싸짐
+  // ---- 에너지 병기 ----
+  // 코일을 넣으면 일정 시간 동안 자동 발사, 맞으면 무엇이든 즉시 소멸
+  // 합체 규칙이 포탑과 다르다 : 레벨이 더해진다 (Lv1+Lv1=Lv2, Lv2+Lv1=Lv3, Lv2+Lv2=Lv4)
+  launcherTiers:[
+    {n:'에너지 발사기 I',  range:520, fire:1.00, coilDur:60,  col:'#16365c', top:'#5ce1ff',
+     base:58, body:30, hh:46, bl:36, bw:12, bn:1, style:'energy'},
+    {n:'에너지 발사기 II', range:560, fire:0.70, coilDur:70,  col:'#144270', top:'#7ce9ff',
+     base:63, body:33, hh:52, bl:40, bw:13, bn:1, style:'energy'},
+    {n:'에너지 발사기 III',range:600, fire:0.50, coilDur:80,  col:'#124d84', top:'#9df0ff',
+     base:68, body:36, hh:58, bl:44, bw:14, bn:2, style:'energy'},
+    {n:'에너지 발사기 IV', range:650, fire:0.35, coilDur:90,  col:'#0f5897', top:'#bff6ff',
+     base:73, body:39, hh:64, bl:48, bw:15, bn:2, style:'energy'},
+    {n:'에너지 발사기 V',  range:700, fire:0.25, coilDur:100, col:'#0b63aa', top:'#e6fcff',
+     base:78, body:42, hh:70, bl:52, bw:16, bn:3, style:'energy'},
+  ],
+  launcherCost:180000, launcherCostMul:1.7,     // 발사기 : Lv1 1대 기준, 살수록 비싸짐
+  launcherBuyPremium:1.15,                      // 상위 레벨 직접 구매 = 합체 비용 x1.15
   coilCost:90000, coilCostMul:1.25,             // 코일(소모품) : 쓸수록 비싸짐
-  coilDur:60, coilFire:1.0,                     // 지속 60초 · 초당 1발
+  coilDur:60,                                   // 기본 지속(레벨이 오르면 launcherTiers.coilDur 사용)
   // ---- 보스 (스테이지 5마다) ----
   bossEvery:5, bossHpMult:12, bossDmgMult:2.6, bossSpeedMult:0.72, bossRMult:2.4, bossReward:60, bossGoldBase:90,
   // ---- 상점 ----
@@ -808,12 +821,31 @@ function reset(){
 }
 // ---- 포탑 ----
 // 구조물 정의 : 일반 포탑은 등급표, 에너지 발사기는 전용 정의를 쓴다
-function tdef(t){ return t.kind==='launcher' ? CFG.launcher : CFG.turretTiers[t.tier]; }
+function tdef(t){ return t.kind==='launcher' ? CFG.launcherTiers[t.tier] : CFG.turretTiers[t.tier]; }
 function isLauncher(t){ return !!t && t.kind==='launcher'; }
-// 합체 가능 여부 : 에너지 병기는 절대 합체되지 않는다
-function canMerge(a,b){
-  return !!a && !!b && a!==b && !isLauncher(a) && !isLauncher(b)
-         && a.tier===b.tier && a.tier<CFG.turretTiers.length-1;
+function maxTier(t){ return (isLauncher(t)?CFG.launcherTiers:CFG.turretTiers).length-1; }
+function coilDurOf(t){ return tdef(t).coilDur || CFG.coilDur; }
+// 합체 결과 등급 (합칠 수 없으면 -1)
+//  포탑   : 같은 레벨 2개 → 한 단계 위          (Lv3+Lv3 = Lv4)
+//  발사기 : 레벨이 더해진다                      (Lv1+Lv1 = Lv2, Lv2+Lv1 = Lv3, Lv2+Lv2 = Lv4)
+function mergeResult(a,b){
+  if(!a||!b||a===b) return -1;
+  if(isLauncher(a)!==isLauncher(b)) return -1;              // 포탑↔발사기는 섞이지 않음
+  if(isLauncher(a)){
+    const r=a.tier+b.tier+1;                                 // 0-based tier = 레벨-1
+    return r<=maxTier(a) ? r : -1;                           // 최고 레벨을 넘으면 합체 불가
+  }
+  return (a.tier===b.tier && a.tier<maxTier(a)) ? a.tier+1 : -1;
+}
+function canMerge(a,b){ return mergeResult(a,b)>=0; }
+// 합체가 안 되는 이유 안내
+function mergeFailMsg(a,b){
+  if(!a||!b||a===b) return null;
+  if(isLauncher(a)!==isLauncher(b)) return '포탑과 에너지 병기는 합쳐지지 않습니다';
+  if(isLauncher(a)) return 'Lv'+(a.tier+1)+'+Lv'+(b.tier+1)+'=Lv'+(a.tier+b.tier+2)
+                          +' — 최고 Lv'+(maxTier(a)+1)+'까지만 가능합니다';
+  if(a.tier!==b.tier) return '포탑은 같은 레벨끼리만 합체됩니다';
+  return '최고 등급은 합체할 수 없습니다';
 }
 // Lv(n+1) 포탑 1대 = Lv1 포탑 2^n대 분량
 function turretUnits(tier){ return Math.pow(2, tier||0); }
@@ -877,17 +909,32 @@ function buyTurret(tier){
   updateShop();
 }
 // ---- 에너지 병기 ----
-function launcherCost(){ return Math.round(CFG.launcherCost*Math.pow(CFG.launcherCostMul,G.launchersBought)); }
+// 레벨이 더해지는 합체라 Lv(n) = Lv1 n대 분량. 포탑과 같은 원칙으로 가격을 맞춘다.
+function launcherUnits(tier){ return (tier||0)+1; }
+function launcherUnitsPrice(units, from){
+  const r=CFG.launcherCostMul;
+  return CFG.launcherCost*Math.pow(r,from)*(Math.pow(r,units)-1)/(r-1);
+}
+function launcherCost(tier){
+  tier=tier||0;
+  const prem = tier>0 ? CFG.launcherBuyPremium : 1;
+  return Math.round(launcherUnitsPrice(launcherUnits(tier), G.launchersBought)*prem);
+}
+function launcherBasePrice(tier){
+  const prem = tier>0 ? CFG.launcherBuyPremium : 1;
+  return launcherUnitsPrice(launcherUnits(tier),0)*prem;
+}
 function coilCost(){ return Math.round(CFG.coilCost*Math.pow(CFG.coilCostMul,G.coilsUsed)); }
-function buyLauncher(){
+function buyLauncher(tier){
+  tier=Math.max(0,Math.min(CFG.launcherTiers.length-1, tier|0));
   if(G.phase==='over') return;
   if(G.turrets.length>=CFG.turretMax){
     floatText(baseNode().x,baseNode().y,'구조물은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
-  const cost=launcherCost(); if(G.gold<cost) return;
+  const cost=launcherCost(tier); if(G.gold<cost) return;
   const s=spawnSpot(); if(!s){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
-  G.gold-=cost; G.launchersBought++;
-  G.turrets.push({kind:'launcher', tier:0, x:s.x, y:s.y, cd:0, shootFlash:0, aim:0, aimT:null, coilT:0});
-  floatText(s.x,s.y,'⚡ 에너지 발사기 설치!','#5ce1ff');
+  G.gold-=cost; G.launchersBought+=launcherUnits(tier);   // 합체 경로와 동일하게 환산
+  G.turrets.push({kind:'launcher', tier, x:s.x, y:s.y, cd:0, shootFlash:0, aim:0, aimT:null, coilT:0});
+  floatText(s.x,s.y,'⚡ '+CFG.launcherTiers[tier].n+' 설치!','#5ce1ff');
   burst(s.x,s.y,'#5ce1ff',16);
   updateShop();
 }
@@ -899,7 +946,7 @@ function buyCoil(){
   let t = isLauncher(G.selTurret) ? G.selTurret
         : (L.find(x=>x.coilT<=0) || L.slice().sort((a,b)=>a.coilT-b.coilT)[0]);
   G.gold-=cost; G.coilsUsed++;
-  t.coilT+=CFG.coilDur;                       // 충전 중이면 시간 연장
+  t.coilT+=coilDurOf(t);                      // 레벨이 높을수록 오래 간다(충전 중이면 연장)
   t.cd=0;
   floatText(t.x,t.y,'⚡ 코일 장착! '+Math.round(t.coilT)+'초','#7cf3ff');
   burst(t.x,t.y,'#7cf3ff',24);
@@ -909,12 +956,14 @@ function buyCoil(){
 function muzzleZ(t){ const T=tdef(t);                      // drawTurret 의 총열 높이와 동일
   return 8+t.tier*0.8 + T.hh + (10+t.tier*1.4)*0.30; }
 function mergeTurrets(src,dst){
-  if(!canMerge(src,dst)) return false;          // 에너지 병기는 합체 대상이 아님
-  dst.tier++; dst.cd=0;
+  const r=mergeResult(src,dst); if(r<0) return false;
+  const nrg=isLauncher(dst);
+  if(nrg) dst.coilT=Math.max(dst.coilT||0, src.coilT||0);   // 남은 코일 시간은 긴 쪽을 유지
+  dst.tier=r; dst.cd=0;
   G.turrets=G.turrets.filter(t=>t!==src);
   G.selTurret=null;
-  floatText(dst.x,dst.y,'✨ '+CFG.turretTiers[dst.tier].n+' Lv'+(dst.tier+1)+'!','#ffd166');
-  burst(dst.x,dst.y,'#ffd166',16);
+  floatText(dst.x,dst.y,'✨ '+tdef(dst).n+(nrg?'':' Lv'+(dst.tier+1))+'!', nrg?'#7cf3ff':'#ffd166');
+  burst(dst.x,dst.y, nrg?'#7cf3ff':'#ffd166', 18);
   return true;
 }
 function moveTurret(t,x,y){                             // 포탑을 원하는 위치로 이동(항상 성공)
@@ -926,19 +975,26 @@ function moveTurret(t,x,y){                             // 포탑을 원하는 �
   G.selTurret=null;
   return true;
 }
-function autoMerge(){                                   // 가능한 쌍 중 가장 높은 등급끼리 합체
+function autoMerge(){                                   // 가능한 쌍 중 가장 좋은 조합으로 합체
   const max=CFG.turretTiers.length-1;
-  for(let tier=max-1; tier>=0; tier--){
+  for(let tier=max-1; tier>=0; tier--){                 // 포탑 : 높은 등급 쌍부터
     const list=G.turrets.filter(t=>!isLauncher(t) && t.tier===tier);
     if(list.length>=2) return mergeTurrets(list[0],list[1]);
   }
-  floatText(baseNode().x,baseNode().y,'합체할 같은 레벨 포탑이 없습니다','#ff8a97');
+  const L=G.turrets.filter(isLauncher);                 // 발사기 : 합쳐서 가장 높아지는 조합
+  let best=null, bestR=-1;
+  for(let i=0;i<L.length;i++) for(let j=i+1;j<L.length;j++){
+    const r=mergeResult(L[i],L[j]);
+    if(r>bestR){ bestR=r; best=[L[i],L[j]]; }
+  }
+  if(best) return mergeTurrets(best[0],best[1]);
+  floatText(baseNode().x,baseNode().y,'합체할 짝이 없습니다','#ff8a97');
   return false;
 }
 function sellTurret(){
   const t=G.selTurret || G.turrets[G.turrets.length-1];
   if(!t) return;
-  const refund=Math.round((isLauncher(t) ? CFG.launcherCost
+  const refund=Math.round((isLauncher(t) ? launcherBasePrice(t.tier)
                           : turretBasePrice(t.tier))*CFG.turretSellFrac);
   G.gold+=refund; G.turrets=G.turrets.filter(x=>x!==t); G.selTurret=null;
   floatText(t.x,t.y,'포탑 판매 💰+'+refund,'#ffd166');
@@ -1058,7 +1114,7 @@ function update(dt){
       if(t.coilT>0 && t.cd<=0){
         const e=t.aimT;
         if(e){
-          t.cd=CFG.coilFire; t.shootFlash=0.3;
+          t.cd=T.fire; t.shootFlash=0.3;
           t.aim=Math.atan2(e.y-t.y, e.x-t.x);
           const mz=muzzleZ(t), off=T.base*0.2+T.bl;
           G.beams.push({x1:t.x+Math.cos(t.aim)*off, y1:t.y+Math.sin(t.aim)*off, z1:mz,
@@ -1306,9 +1362,16 @@ function drawTurret(g,t){
     const coilCol = on ? (pulse>0.5?'#9df3ff':'#5ce1ff') : '#2b3f5c';
     add(t.x,t.y,baseH+T.hh*0.34,bw*1.18,bw*1.18,7,'#0b1c33');
     add(t.x,t.y,baseH+T.hh*0.45,13,13,15,coilCol, on?G.anim*2.2:0);       // 코일 본체
-    if(on){                                                               // 충전 링
-      add(t.x,t.y,baseH+T.hh*0.45+16,20,20,3,'#9df3ff', -G.anim*1.7);
-      add(t.x,t.y,baseH+T.hh*0.45-4,18,18,3,'#9df3ff',  G.anim*1.3);
+    if(on){                                                               // 충전 링(레벨이 높을수록 많다)
+      const rings=1+t.tier;
+      for(let i=0;i<rings;i++){
+        const rz=baseH+T.hh*0.45-4+i*7, rw=18+i*2.2, dir=(i%2?1:-1);
+        add(t.x,t.y,rz,rw,rw,3,'#9df3ff', dir*G.anim*(1.3+i*0.25));
+      }
+    }
+    for(let i=0;i<t.tier;i++){                                            // 레벨 표식(옆면 발광 블록)
+      const q=side(T.body*0.62*(i%2?1:-1), -10+Math.floor(i/2)*9);
+      add(q[0],q[1],baseH+T.hh*0.62,5,5,5, on?'#bff6ff':'#33506e', ang);
     }
   } else {                                                    // Lv7 : 용의 포탑 - 날개 + 뿔
     add(t.x,t.y,baseH,bw*0.9,bw*0.9,T.hh,T.col);
@@ -1342,7 +1405,7 @@ function drawTurret(g,t){
 
   // 라벨 : 일반 포탑=등급 / 에너지 발사기=남은 코일 시간
   const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,headZ+headH+(T.style==='dragon'?34:22));
-  const label = isLauncher(t) ? (t.coilT>0 ? '⚡'+Math.ceil(t.coilT)+'초' : '코일 없음')
+  const label = isLauncher(t) ? ('Lv'+(t.tier+1)+(t.coilT>0 ? ' ⚡'+Math.ceil(t.coilT)+'초' : ' 코일없음'))
                               : 'Lv'+(t.tier+1);
   const lcol  = isLauncher(t) ? (t.coilT>0?'#7cf3ff':'#8b97b8') : T.top;
   g.textAlign='center'; g.font='bold '+Math.max(9,11*CAM.scale)+'px Segoe UI';
@@ -1451,17 +1514,24 @@ function updateShop(){
   document.getElementById('turSlotInfo').textContent =
     full ? '⚠ 포탑은 최대 '+CFG.turretMax+'개까지 (합체하면 자리가 생깁니다)'
          : '보유 '+G.turrets.length+'/'+CFG.turretMax+'개 · 산 포탑은 화면에서 끌어 원하는 곳에 배치';
-  const maxTier=CFG.turretTiers.length-1;
+  const maxT=CFG.turretTiers.length-1;
   let pair=-1;
-  for(let i=maxTier-1;i>=0;i--){ if(G.turrets.filter(t=>t.tier===i).length>=2){ pair=i; break; } }
+  for(let i=maxT-1;i>=0;i--){ if(G.turrets.filter(t=>!isLauncher(t)&&t.tier===i).length>=2){ pair=i; break; } }
+  let nrgPair=null, nrgBest=-1;                       // 발사기 조합(레벨 합)
+  const LL=G.turrets.filter(isLauncher);
+  for(let i=0;i<LL.length;i++) for(let j=i+1;j<LL.length;j++){
+    const r=mergeResult(LL[i],LL[j]); if(r>nrgBest){ nrgBest=r; nrgPair=[LL[i],LL[j]]; }
+  }
   const mb=document.getElementById('mergeTurret');
   mb.textContent = pair>=0
     ? ('⚡ 합체\nLv'+(pair+1)+'×2 → '+CFG.turretTiers[pair+1].n
        +'\n연사 초당 '+(1/CFG.turretTiers[pair].fire).toFixed(1)+'→'+(1/CFG.turretTiers[pair+1].fire).toFixed(1)+'발')
-    : '⚡ 합체\n같은 레벨 2개 필요';
-  mb.style.whiteSpace='pre-line'; mb.disabled=(pair<0);
+    : (nrgPair
+       ? ('⚡ 합체\n발사기 Lv'+(nrgPair[0].tier+1)+'+Lv'+(nrgPair[1].tier+1)+' → Lv'+(nrgBest+1))
+       : '⚡ 합체\n합칠 짝이 없음');
+  mb.style.whiteSpace='pre-line'; mb.disabled=(pair<0 && !nrgPair);
   const sb=document.getElementById('sellTurret'), st=G.selTurret||G.turrets[G.turrets.length-1];
-  sb.textContent = st ? ('♻ 판매\n'+tdef(st).n+' 💰+'+Math.round((isLauncher(st)?CFG.launcherCost
+  sb.textContent = st ? ('♻ 판매\n'+tdef(st).n+' 💰+'+Math.round((isLauncher(st)?launcherBasePrice(st.tier)
                             :turretBasePrice(st.tier))*CFG.turretSellFrac).toLocaleString())
                       : '♻ 판매\n보유 구조물 없음';
   sb.style.whiteSpace='pre-line'; sb.disabled=!st;
@@ -1469,21 +1539,25 @@ function updateShop(){
   for(const t of G.turrets) if(!isLauncher(t)) counts[t.tier]++;
   const lch=G.turrets.filter(isLauncher);
   const chips=counts.map((c,i)=>c?'<span class="tchip">Lv'+(i+1)+' '+CFG.turretTiers[i].n+' <b>×'+c+'</b></span>':'').join('')
-    + lch.map(t=>'<span class="tchip">⚡ 발사기 <b>'+(t.coilT>0?Math.ceil(t.coilT)+'초':'코일 없음')+'</b></span>').join('');
+    + lch.map(t=>'<span class="tchip">⚡ Lv'+(t.tier+1)+' 발사기 <b>'+(t.coilT>0?Math.ceil(t.coilT)+'초':'코일 없음')+'</b></span>').join('');
   document.getElementById('turList').innerHTML = chips || '<span class="tchip">보유 구조물 없음</span>';
 
   // 에너지 병기
-  const lc=launcherCost(), cc=coilCost(), bl=document.getElementById('buyLauncher'), bc=document.getElementById('buyCoil');
-  bl.textContent='⚡ 에너지 발사기\n설치 · 💰'+lc.toLocaleString();
-  bl.style.whiteSpace='pre-line'; bl.disabled = full || G.gold<lc;
+  const cc=coilCost(), bc=document.getElementById('buyCoil');
+  for(let i=0;i<CFG.launcherTiers.length;i++){
+    const L=CFG.launcherTiers[i], b=document.getElementById('buyNrg_'+i), c=launcherCost(i);
+    b.textContent='Lv'+(i+1)+' 발사기\n초당 '+(1/L.fire).toFixed(1)+'발 · '+L.coilDur+'초\n💰'+c.toLocaleString();
+    b.disabled = full || G.gold<c;
+    b.style.borderLeft='4px solid '+L.top;
+  }
   const empty=lch.filter(t=>t.coilT<=0).length;
   bc.textContent=(empty?'🔋 에너지 코일 재장착\n':'🔋 에너지 코일\n')+CFG.coilDur+'초 가동 · 💰'+cc.toLocaleString();
   bc.style.whiteSpace='pre-line'; bc.disabled = !lch.length || G.gold<cc;
   document.getElementById('nrgInfo').textContent = !lch.length
-    ? '발사기를 먼저 설치해야 코일을 넣을 수 있습니다.'
+    ? '발사기를 먼저 설치해야 코일을 넣을 수 있습니다. 발사기끼리 겹치면 레벨이 더해집니다.'
     : '발사기 '+lch.length+'대'+(empty?' (빈 발사기 '+empty+'대)':'')
-      +' · 코일이 다 닳아도 새 코일을 넣으면 다시 '+CFG.coilDur+'초 가동됩니다. '
-      +'화면에서 고른 발사기에 들어가고(안 고르면 비어있는 쪽), 켜져 있는 발사기에 넣으면 시간이 더해집니다.';
+      +' · 코일이 다 닳아도 새 코일을 넣으면 다시 가동됩니다(레벨이 높을수록 오래 감). '
+      +'화면에서 고른 발사기에 들어가고(안 고르면 비어있는 쪽), 켜져 있으면 시간이 더해집니다.';
   const wc=CFG.weapons[G.weaponTier], wn=CFG.weapons[G.weaponTier+1];
   document.getElementById('weaponCur').textContent='· 현재 '+wc.n+' (공격 +'+wc.dmg+')';
   const bw=document.getElementById('buyWeapon');
@@ -1640,10 +1714,11 @@ cv.addEventListener('pointerdown', ev=>{
   dragFrom={x:hit.x, y:hit.y};                               // 못 놓으면 되돌릴 원래 자리
   if(!G.selTurret || G.selTurret===hit){ G.selTurret=(G.selTurret===hit)?null:hit; return; }
   if(canMerge(G.selTurret,hit)){ mergeTurrets(G.selTurret,hit); dragT=null; }
-  else if(isLauncher(hit)||isLauncher(G.selTurret)){ G.selTurret=hit; }   // 에너지 병기는 합체 안 됨
-  else if(G.selTurret.tier===hit.tier){
-    floatText(hit.x,hit.y,'최고 등급은 합체할 수 없습니다','#ff8a97'); G.selTurret=null;
-  } else { floatText(hit.x,hit.y,'같은 레벨끼리만 합체됩니다','#ff8a97'); G.selTurret=hit; }
+  else {
+    const msg=mergeFailMsg(G.selTurret,hit);
+    if(msg) floatText(hit.x,hit.y,msg,'#ff8a97');
+    G.selTurret=hit;                                   // 못 합치면 그 구조물을 대신 고른다
+  }
 });
 cv.addEventListener('pointermove', ev=>{
   if(!dragT) return;
@@ -1667,8 +1742,7 @@ function endDrag(ev){
       const s=placeSpot(dragT.x,dragT.y,dragT);              // 어디에 놓든 그 자리(또는 바로 옆)에 배치
       if(s){ dragT.x=s.x; dragT.y=s.y;
         burst(s.x,s.y,'#8ad3ff',6); floatText(s.x,s.y,'↔ 포탑 이동','#8ad3ff'); G.selTurret=null;
-        if(over && !isLauncher(over) && !isLauncher(dragT))
-          floatText(over.x,over.y,'같은 레벨끼리만 합체됩니다','#c8b4ff');
+        if(over){ const msg=mergeFailMsg(dragT,over); if(msg) floatText(over.x,over.y,msg,'#c8b4ff'); }
       } else { dragT.x=dragFrom.x; dragT.y=dragFrom.y; }     // (맵이 꽉 찬 극단적 경우만)
     }
   }
@@ -1729,7 +1803,15 @@ document.getElementById('shopClose').onclick=closeShop;
   });
 })();
 document.getElementById('mergeTurret').onclick=()=>{ autoMerge(); updateShop(); };
-document.getElementById('buyLauncher').onclick=buyLauncher;
+(function buildLauncherShop(){                    // 레벨별 발사기 구매 버튼
+  const grid=document.getElementById('nrgBuyGrid');
+  CFG.launcherTiers.forEach((L,i)=>{
+    const b=document.createElement('button');
+    b.id='buyNrg_'+i; b.className='buy nrg'; b.style.whiteSpace='pre-line';
+    b.onclick=()=>buyLauncher(i);
+    grid.appendChild(b);
+  });
+})();
 document.getElementById('buyCoil').onclick=buyCoil;
 document.getElementById('sellTurret').onclick=sellTurret;
 document.getElementById('buyWeapon').onclick=buyWeapon;
