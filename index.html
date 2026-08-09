@@ -27,6 +27,7 @@
   #up{background:var(--accent)}
   #shopBtn{background:#a78bfa; color:#160b2e}
   #rotBtn{background:#2b3552; color:var(--text)}
+  #mapBtn{background:#4f9b6b; color:#04121a}
   button:disabled{opacity:.4; cursor:default}
   canvas{flex:1; display:block; width:100%; touch-action:none}
   #hud,#over,#shop{-webkit-user-select:none; user-select:none; -webkit-touch-callout:none}
@@ -77,6 +78,17 @@
   .thint{font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5}
   .pots{display:grid; grid-template-columns:1fr 1fr; gap:6px}
   .pots .buy{font-size:12.5px; padding:8px 12px; line-height:1.25}
+  #maps{position:absolute; inset:0; display:none; place-items:center; z-index:12;
+    background:rgba(6,10,22,.86); backdrop-filter:blur(3px); padding:14px}
+  .maplist{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+  .mapopt{background:#243052; border:2px solid #2b3552; border-radius:12px; padding:8px; cursor:pointer;
+    color:var(--text); text-align:left; font:inherit; display:flex; flex-direction:column; gap:6px;
+    align-items:stretch; min-width:0}
+  .mapopt.sel{border-color:var(--ally); background:#1e4a44}
+  .mapopt canvas{background:#14301c; border-radius:8px; width:100%; height:auto; display:block}
+  .mapopt .mt{min-width:0}
+  .mapopt .mn{font-weight:700; font-size:13px; white-space:nowrap}
+  .mapopt .md{font-size:10.5px; color:var(--muted); line-height:1.35; word-break:keep-all}
 </style>
 </head>
 <body>
@@ -92,6 +104,7 @@
     <div class="spacer"></div>
     <span class="tag" id="next">다음 아군 0/5</span>
     <span class="tag" id="buffs"></span>
+    <button id="mapBtn">🗺 길</button>
     <button id="rotBtn" title="화면 회전">🔄 회전</button>
     <button id="shopBtn">상점</button>
     <button id="up">강화 💰20</button>
@@ -113,6 +126,20 @@
     </div>
     <div class="runs" id="oRuns"></div>
     <p style="margin-top:14px"><button id="again" style="background:#38e8b0">다시 시작</button></p>
+  </div>
+</div>
+<div id="maps">
+  <div class="scard">
+    <div class="shead">
+      <h2>길 고르기</h2>
+      <span class="g">길이는 모두 <b>같음</b></span>
+      <button id="mapsClose">닫기</button>
+    </div>
+    <div class="ssec" style="border-top:0">
+      <div id="mapList" class="maplist"></div>
+      <div class="thint">길마다 모양이 다르지만 <b style="color:#8ad3ff">총 길이는 22칸으로 동일</b>해서 난이도는 같습니다.
+        길을 바꾸면 판이 새로 시작됩니다.</div>
+    </div>
   </div>
 </div>
 <div id="shop">
@@ -265,9 +292,25 @@ const CFG = {
 
 // ---- 월드(고정 좌표계) : 화면 크기와 무관하게 밸런스 일정 ----
 const WORLD = {w:1280, h:720};
-const PATH = [[0.06,0.53],[0.34,0.53],[0.34,0.31],[0.66,0.31],[0.66,0.53],
-              [0.42,0.53],[0.42,0.72],[0.60,0.72],[0.60,0.53],[0.50,0.53]];
-const WP = PATH.map(([fx,fy])=>({x:fx*WORLD.w, y:fy*WORLD.h}));
+
+// ---- 길 종류 : 격자 위에 설계해 4개 모두 정확히 22칸(=1936)으로 길이가 같다 ----
+const GCELL=88, GOX=68, GOY=52;
+const MAPS = [
+  {n:'굽이길', desc:'좌→우로 크게 꺾이는 기본 길', pts:[[0,1],[5,1],[5,3],[2,3],[2,6],[8,6],[8,4],[7,4]]},
+  {n:'나선길', desc:'바깥에서 안으로 감겨드는 길', pts:[[13,6],[9,6],[9,2],[3,2],[3,5],[6,5],[6,4],[7,4]]},
+  {n:'우회길', desc:'왼쪽 아래를 크게 도는 길',   pts:[[0,7],[0,3],[4,3],[4,6],[10,6],[10,4],[7,4]]},
+  {n:'관통길', desc:'오른쪽 위에서 파고드는 길',   pts:[[13,0],[10,0],[10,3],[12,3],[12,6],[5,6],[5,4],[7,4]]},
+];
+function pathLength(pts){                        // 칸 수(모든 맵이 같아야 함)
+  let n=0; for(let i=0;i<pts.length-1;i++) n+=Math.abs(pts[i+1][0]-pts[i][0])+Math.abs(pts[i+1][1]-pts[i][1]);
+  return n;
+}
+let WP = [];
+function setPath(i){
+  const m=MAPS[(i%MAPS.length+MAPS.length)%MAPS.length];
+  WP = m.pts.map(([gx,gy])=>({x:GOX+gx*GCELL, y:GOY+gy*GCELL}));
+}
+setPath(0);
 function baseNode(){ return WP[WP.length-1]; }
 
 // ---- 포탑 자리 : 길을 따라 좌/우로 번갈아 배치 ----
@@ -306,7 +349,90 @@ function buildTurretSlots(){
   }
   return out;
 }
-const TSPOTS = buildTurretSlots();   // 구매 시 처음 놓이는 위치(이후 자유롭게 이동 가능)
+let TSPOTS = buildTurretSlots();     // 구매 시 처음 놓이는 위치(이후 자유롭게 이동 가능)
+
+// ---- 맵 장식 : 나무·바위·덤불·꽃·연못 (정적이므로 지면 캐시에 한 번만 구워 넣는다) ----
+function mulberry32(a){ return function(){          // 고정 시드 난수 → 같은 맵이면 항상 같은 배치
+  a|=0; a=a+0x6D2B79F5|0;
+  let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t;
+  return ((t^t>>>14)>>>0)/4294967296; }; }
+let DECOR=[], PONDS=[];
+function buildDecor(seed){
+  const rnd=mulberry32(1000+seed*7919);
+  DECOR=[]; PONDS=[];
+  const b=baseNode();
+  const free=(x,y,pad)=>distToPath(x,y)>pad && Math.hypot(x-b.x,y-b.y)>120
+                        && x>26 && y>26 && x<WORLD.w-26 && y<WORLD.h-26;
+  // 연못 1~2개
+  for(let i=0;i<2;i++){
+    for(let k=0;k<60;k++){
+      const x=60+rnd()*(WORLD.w-120), y=60+rnd()*(WORLD.h-120), r=52+rnd()*34;
+      if(distToPath(x,y)>r+52 && Math.hypot(x-b.x,y-b.y)>r+150 &&
+         !PONDS.some(p=>Math.hypot(p.x-x,p.y-y)<p.r+r+60)){ PONDS.push({x,y,r}); break; }
+    }
+  }
+  const onPond=(x,y,pad)=>PONDS.some(p=>Math.hypot(p.x-x,p.y-y)<p.r+(pad||0));
+  const put=(kind,x,y,extra)=>DECOR.push(Object.assign({kind,x,y},extra||{}));
+  // 나무 (숲처럼 뭉쳐서)
+  let clusters=0;
+  for(let k=0;k<400 && clusters<9;k++){
+    const cx=50+rnd()*(WORLD.w-100), cy=50+rnd()*(WORLD.h-100);
+    if(!free(cx,cy,86) || onPond(cx,cy,40)) continue;
+    clusters++;
+    const n=2+((rnd()*4)|0);
+    for(let i=0;i<n;i++){
+      const x=cx+(rnd()-0.5)*110, y=cy+(rnd()-0.5)*110;
+      if(!free(x,y,64) || onPond(x,y,26)) continue;
+      put('tree',x,y,{s:0.8+rnd()*0.55, dark:rnd()<0.4});
+    }
+  }
+  // 바위 · 덤불 · 꽃
+  for(let i=0;i<26;i++){ const x=40+rnd()*(WORLD.w-80), y=40+rnd()*(WORLD.h-80);
+    if(free(x,y,52) && !onPond(x,y,18)) put('rock',x,y,{s:0.7+rnd()*0.8}); }
+  for(let i=0;i<34;i++){ const x=40+rnd()*(WORLD.w-80), y=40+rnd()*(WORLD.h-80);
+    if(free(x,y,44) && !onPond(x,y,14)) put('bush',x,y,{s:0.7+rnd()*0.6}); }
+  for(let i=0;i<70;i++){ const x=30+rnd()*(WORLD.w-60), y=30+rnd()*(WORLD.h-60);
+    if(free(x,y,36) && !onPond(x,y,10)) put('flower',x,y,{c:['#ff7ab6','#ffe066','#ffffff','#c78bff'][(rnd()*4)|0]}); }
+  // 길가 울타리 (길과 나란히, 일정 간격)
+  for(let i=0;i<WP.length-1;i++){
+    const a=WP[i], c=WP[i+1], L=Math.hypot(c.x-a.x,c.y-a.y)||1;
+    const ux=(c.x-a.x)/L, uy=(c.y-a.y)/L;
+    for(let d=26; d<L-16; d+=46){
+      for(const sgn of [-1,1]){
+        const x=a.x+ux*d-uy*40*sgn, y=a.y+uy*d+ux*40*sgn;
+        if(distToPath(x,y)>30 && Math.hypot(x-b.x,y-b.y)>110 && !onPond(x,y,8)
+           && x>20 && y>20 && x<WORLD.w-20 && y<WORLD.h-20) put('fence',x,y,{});
+      }
+    }
+  }
+}
+function drawDecor(g){
+  DECOR.sort((p,q)=>depthOf(p.x,p.y)-depthOf(q.x,q.y));   // 뒤에서 앞으로(회전 반영)
+  for(const d of DECOR){
+    if(d.kind==='tree'){
+      const s=d.s, tc=d.dark?'#4a7a2a':'#5fae35';
+      box(g,d.x,d.y,0,9*s,9*s,26*s,'#6b4a2a');                    // 줄기
+      box(g,d.x,d.y,22*s,30*s,30*s,20*s,tc);                      // 잎 아래단
+      box(g,d.x,d.y,40*s,22*s,22*s,16*s,shadeHex(tc,1.12));       // 잎 위단
+      box(g,d.x,d.y,54*s,12*s,12*s,10*s,shadeHex(tc,1.22));       // 꼭대기
+    } else if(d.kind==='rock'){
+      const s=d.s;
+      box(g,d.x,d.y,0,22*s,20*s,12*s,'#8d949f');
+      box(g,d.x-4*s,d.y+3*s,10*s,12*s,11*s,8*s,'#a8afb9');
+    } else if(d.kind==='bush'){
+      const s=d.s;
+      box(g,d.x,d.y,0,20*s,18*s,12*s,'#3f7f2e');
+      box(g,d.x+3*s,d.y-2*s,10*s,13*s,12*s,9*s,'#4f9b39');
+    } else if(d.kind==='fence'){
+      box(g,d.x,d.y,0,4,4,13,'#8a6b40');
+      box(g,d.x,d.y,9,3.5,15,3,'#a07d4c');
+    } else {                                                       // 꽃
+      box(g,d.x,d.y,0,2.5,2.5,5,'#3f7f2e');
+      box(g,d.x,d.y,5,4.5,4.5,3,d.c);
+    }
+  }
+}
+function shadeHex(hex,f){ return darken(hex,f); }
 
 // 화면 좌표 → 월드 좌표 (지면 z=0 평면 기준) : 포탑을 끌어다 놓을 때 사용
 function screenToWorld(sx,sy){
@@ -503,6 +629,31 @@ function buildGround(){
   g.moveTo(isoX(0,0),isoY(0,0,0)); g.lineTo(isoX(wd,0),isoY(wd,0,0));
   g.lineTo(isoX(wd,hd),isoY(wd,hd,0)); g.lineTo(isoX(0,hd),isoY(0,hd,0));
   g.closePath(); g.fill();
+  // 잔디 얼룩·연못은 베이스플레이트 밖으로 나가지 않도록 잘라낸다
+  g.save();
+  g.beginPath();
+  g.moveTo(isoX(0,0),isoY(0,0,0)); g.lineTo(isoX(wd,0),isoY(wd,0,0));
+  g.lineTo(isoX(wd,hd),isoY(wd,hd,0)); g.lineTo(isoX(0,hd),isoY(0,hd,0));
+  g.closePath(); g.clip();
+  // 잔디 얼룩 : 밋밋한 단색 대신 밝고 어두운 풀밭이 섞이게
+  const grnd=mulberry32(77+G.pathIndex*131);
+  for(let i=0;i<70;i++){
+    const x=grnd()*wd, y=grnd()*hd, r=40+grnd()*90;
+    g.fillStyle = grnd()<0.5 ? 'rgba(120,200,80,.20)' : 'rgba(60,140,50,.18)';
+    g.beginPath(); g.ellipse(isoX(x,y),isoY(x,y,0), r*ISO_X*1.42*CAM.scale, r*ISO_Y*1.42*CAM.scale,0,0,7); g.fill();
+  }
+  // 연못
+  for(const pd of PONDS){
+    const rx=pd.r*ISO_X*1.42*CAM.scale, ry=pd.r*ISO_Y*1.42*CAM.scale;
+    g.fillStyle='rgba(40,90,70,.55)';
+    g.beginPath(); g.ellipse(isoX(pd.x,pd.y),isoY(pd.x,pd.y,0), rx*1.08, ry*1.08,0,0,7); g.fill();
+    g.fillStyle='#2f8fd0';
+    g.beginPath(); g.ellipse(isoX(pd.x,pd.y),isoY(pd.x,pd.y,0), rx, ry,0,0,7); g.fill();
+    g.fillStyle='rgba(160,225,255,.45)';
+    g.beginPath(); g.ellipse(isoX(pd.x-pd.r*0.25,pd.y-pd.r*0.25),isoY(pd.x-pd.r*0.25,pd.y-pd.r*0.25,0),
+      rx*0.42, ry*0.42,0,0,7); g.fill();
+  }
+  g.restore();
   // 스터드
   for(let x=32;x<wd;x+=64) for(let y=32;y<hd;y+=64) stud(g,x,y,0,11,'rgba(255,255,255,.13)');
 
@@ -536,10 +687,22 @@ function buildGround(){
   g.beginPath(); g.ellipse(isoX(b.x,b.y),isoY(b.x,b.y,1), 96*ISO_X*1.42*CAM.scale, 96*ISO_Y*1.42*CAM.scale,0,0,7); g.fill();
   g.strokeStyle='rgba(56,232,176,.75)'; g.lineWidth=Math.max(1,2.5*CAM.scale);
   g.beginPath(); g.ellipse(isoX(b.x,b.y),isoY(b.x,b.y,1), 96*ISO_X*1.42*CAM.scale, 96*ISO_Y*1.42*CAM.scale,0,0,7); g.stroke();
-  // 스폰 패드
+  // 스폰 패드 + 적 진영 문
   const s0=WP[0];
   g.fillStyle='rgba(255,90,106,.45)';
   g.beginPath(); g.ellipse(isoX(s0.x,s0.y),isoY(s0.x,s0.y,1), 38*ISO_X*1.42*CAM.scale, 38*ISO_Y*1.42*CAM.scale,0,0,7); g.fill();
+
+  // 장식물(나무·바위·덤불·꽃·울타리) — 정적이라 여기서 한 번만 그린다
+  drawDecor(g);
+
+  // 기지 깃발 : 목표 지점을 눈에 띄게
+  box(g,b.x-52,b.y-52,0,10,10,44,'#7a5a34');
+  box(g,b.x-52+11,b.y-52,32,22,4,14,'#38e8b0');
+  box(g,b.x+52,b.y+52,0,10,10,44,'#7a5a34');
+  box(g,b.x+52-11,b.y+52,32,22,4,14,'#38e8b0');
+  // 적 진영 표식
+  box(g,s0.x,s0.y-34,0,8,8,34,'#5b2130');
+  box(g,s0.x+9,s0.y-34,24,18,4,12,'#ff5a6a');
 
   // (포탑은 정해진 자리 없이 어디에나 놓을 수 있으므로 자리 표시는 그리지 않는다)
 }
@@ -560,7 +723,7 @@ const G = {
   weaponTier:0, armorTier:0, shopOpen:false, potionField:[], buffs:{rageT:0,luckT:0,guardT:0},
   allies:[], enemies:[], shots:[], fx:[], nums:[], beams:[],
   turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1, anim:0, dropInfo:null,
-  launchersBought:0, coilsUsed:0,
+  launchersBought:0, coilsUsed:0, pathIndex:0,
 };
 
 // ---- 기록(하이스코어) : localStorage 영속 ----
@@ -612,6 +775,15 @@ function applyAllyStats(){
     const d=s.maxHp-a.maxHp; a.maxHp=s.maxHp; a.hp=Math.min(s.maxHp,a.hp+Math.max(0,d));
     a.dmg=s.dmg+weaponDmg(); a.fire=s.fire; a.def=armorDef();
   }
+}
+// 길 바꾸기 : 경로·포탑 기본자리·장식물을 다시 만들고 판을 초기화
+function selectMap(i){
+  G.pathIndex=(i%MAPS.length+MAPS.length)%MAPS.length;
+  setPath(G.pathIndex);
+  TSPOTS=buildTurretSlots();
+  buildDecor(G.pathIndex);
+  reset(); fitCamera(); buildGround(); updateHUD();
+  const b=baseNode(); floatText(b.x,b.y,'🗺 '+MAPS[G.pathIndex].n,'#8ad3ff');
 }
 function reset(){
   G.enemies.length=G.shots.length=G.fx.length=G.nums.length=G.beams.length=0;
@@ -862,7 +1034,7 @@ function update(dt){
     if(isLauncher(t)){                           // ---- 에너지 발사기 : 코일이 있어야 발사 ----
       if(t.coilT>0 && G.phase==='running'){      // 정비 중(끝내기)에는 코일이 닳지 않는다
         t.coilT-=dt;
-        if(t.coilT<=0){ t.coilT=0; floatText(t.x,t.y,'에너지 코일 소진','#ff8a97'); }
+        if(t.coilT<=0){ t.coilT=0; floatText(t.x,t.y,'에너지 코일 소진 — 새 코일을 넣으면 재가동','#ff8a97'); }
       }
       if(t.coilT>0 && t.cd<=0){
         const e=t.aimT;
@@ -1281,11 +1453,14 @@ function updateShop(){
   const lc=launcherCost(), cc=coilCost(), bl=document.getElementById('buyLauncher'), bc=document.getElementById('buyCoil');
   bl.textContent='⚡ 에너지 발사기\n설치 · 💰'+lc.toLocaleString();
   bl.style.whiteSpace='pre-line'; bl.disabled = full || G.gold<lc;
-  bc.textContent='🔋 에너지 코일\n'+CFG.coilDur+'초 장착 · 💰'+cc.toLocaleString();
+  const empty=lch.filter(t=>t.coilT<=0).length;
+  bc.textContent=(empty?'🔋 에너지 코일 재장착\n':'🔋 에너지 코일\n')+CFG.coilDur+'초 가동 · 💰'+cc.toLocaleString();
   bc.style.whiteSpace='pre-line'; bc.disabled = !lch.length || G.gold<cc;
   document.getElementById('nrgInfo').textContent = !lch.length
     ? '발사기를 먼저 설치해야 코일을 넣을 수 있습니다.'
-    : '발사기 '+lch.length+'대 · 코일은 화면에서 고른 발사기에 들어갑니다(안 고르면 비어있는 쪽). 이미 켜져 있으면 시간이 더해집니다.';
+    : '발사기 '+lch.length+'대'+(empty?' (빈 발사기 '+empty+'대)':'')
+      +' · 코일이 다 닳아도 새 코일을 넣으면 다시 '+CFG.coilDur+'초 가동됩니다. '
+      +'화면에서 고른 발사기에 들어가고(안 고르면 비어있는 쪽), 켜져 있는 발사기에 넣으면 시간이 더해집니다.';
   const wc=CFG.weapons[G.weaponTier], wn=CFG.weapons[G.weaponTier+1];
   document.getElementById('weaponCur').textContent='· 현재 '+wc.n+' (공격 +'+wc.dmg+')';
   const bw=document.getElementById('buyWeapon');
@@ -1447,6 +1622,41 @@ cv.addEventListener('pointercancel', ()=>{
   dragT=null; dragOn=false; G.dropInfo=null;
 });
 
+// ---- 길 고르기 ----
+function drawMapPreview(cv2, m, on){                 // 미니 경로 미리보기
+  const g=cv2.getContext('2d'), W2=cv2.width, H2=cv2.height, pad=7;
+  g.clearRect(0,0,W2,H2);
+  g.fillStyle=on?'#1c4a2c':'#14301c'; g.fillRect(0,0,W2,H2);
+  const sx=(W2-pad*2)/13, sy=(H2-pad*2)/7;
+  g.strokeStyle=on?'#7cf3ff':'#9aa6c4'; g.lineWidth=3; g.lineJoin='round'; g.lineCap='round';
+  g.beginPath();
+  m.pts.forEach(([gx,gy],i)=>{ const x=pad+gx*sx, y=pad+gy*sy; i?g.lineTo(x,y):g.moveTo(x,y); });
+  g.stroke();
+  const s=m.pts[0], e=m.pts[m.pts.length-1];
+  g.fillStyle='#ff5a6a'; g.beginPath(); g.arc(pad+s[0]*sx,pad+s[1]*sy,4,0,7); g.fill();   // 시작
+  g.fillStyle='#38e8b0'; g.beginPath(); g.arc(pad+e[0]*sx,pad+e[1]*sy,4.5,0,7); g.fill(); // 기지
+}
+function buildMapList(){
+  const list=document.getElementById('mapList');
+  list.innerHTML='';
+  MAPS.forEach((m,i)=>{
+    const b=document.createElement('button');
+    b.className='mapopt'+(i===G.pathIndex?' sel':'');
+    const c=document.createElement('canvas'); c.width=196; c.height=112;
+    const txt=document.createElement('div'); txt.className='mt';
+    txt.innerHTML='<div class="mn">'+m.n+'</div><div class="md">'+m.desc+
+                  ' · 길이 '+pathLength(m.pts)+'칸</div>';
+    b.appendChild(c); b.appendChild(txt);
+    b.onclick=()=>{ if(i!==G.pathIndex) selectMap(i); buildMapList(); closeMaps(); };
+    list.appendChild(b);
+    drawMapPreview(c,m,i===G.pathIndex);
+  });
+}
+function openMaps(){ buildMapList(); document.getElementById('maps').style.display='grid'; }
+function closeMaps(){ document.getElementById('maps').style.display='none'; }
+document.getElementById('mapBtn').onclick=openMaps;
+document.getElementById('mapsClose').onclick=closeMaps;
+
 document.getElementById('rotBtn').onclick=rotateView;
 document.getElementById('shopBtn').onclick=openShop;
 document.getElementById('shopClose').onclick=closeShop;
@@ -1472,6 +1682,7 @@ document.getElementById('start').onclick=startGame;
 document.getElementById('stop').onclick=stopGame;
 document.getElementById('again').onclick=startGame;
 
+buildDecor(0);
 resize(); reset(); updateHUD();
 requestAnimationFrame(frame);
 </script>
