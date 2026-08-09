@@ -91,6 +91,7 @@
   .buy.tur{background:#1f4a6b}
   .buy.nrg{background:#123a5c; border:1px solid #2f7fb0}
   .buy.coil{background:#0f5550; border:1px solid #2fb0a4}
+  .buy.lsr{background:#4a1030; border:1px solid #b0367a}
   .buy.merge{background:#6b5a1f}
   .tlist{display:flex; flex-wrap:wrap; gap:4px; margin-top:8px}
   .tchip{font-size:11px; background:#0e1428; border:1px solid #2b3552; border-radius:8px; padding:3px 7px; color:var(--muted)}
@@ -205,6 +206,11 @@
       <div class="thint">포탑을 끌어서 <b style="color:#8ad3ff">아무 곳에나</b> 놓을 수 있습니다(길 위도 가능).
         같은 레벨 포탑 위에 놓으면 <b style="color:#ffd166">합체</b>.
         탭으로 고른 뒤 원하는 곳을 탭해도 옮겨집니다.</div>
+    </div>
+    <div class="ssec">
+      <h3>레이저 <small>길을 가로지르는 빔 · 지나가는 적이 닿아 있는 동안 계속 피해 · 좌클릭으로 이동</small></h3>
+      <div class="pots" id="laserBuyGrid"></div>
+      <div class="thint" id="laserInfo"></div>
     </div>
     <div class="ssec">
       <h3>에너지 병기 <small>코일을 넣으면 일정 시간 자동 발사, 맞으면 무엇이든 한 방 ·
@@ -336,6 +342,16 @@ const CFG = {
     {n:'에너지 발사기 V',  shots:5, range:700, fire:1.0, coilDur:100, col:'#0b63aa', top:'#e6fcff',
      base:78, body:42, hh:70, bl:52, bw:16, bn:3, style:'energy'},
   ],
+  // ---- 레이저 : 길을 가로지르는 빔. 지나가는 적이 닿아 있는 동안 계속 피해 ----
+  laserTiers:[
+    {n:'레이저 I',   dps:180,    width:26, len:96,  cost:2000,    col:'#5c1030', top:'#ff4d7a', base:26, hh:26},
+    {n:'레이저 II',  dps:700,    width:29, len:104, cost:8000,    col:'#6b0f3e', top:'#ff5fa0', base:29, hh:30},
+    {n:'레이저 III', dps:2650,   width:32, len:112, cost:32000,   col:'#4a0f6b', top:'#c46bff', base:32, hh:34},
+    {n:'레이저 IV',  dps:10000,  width:35, len:120, cost:130000,  col:'#0f3f6b', top:'#5fb0ff', base:35, hh:38},
+    {n:'레이저 V',   dps:38000,  width:38, len:128, cost:520000,  col:'#0f6b5a', top:'#3ef0c0', base:38, hh:42},
+    {n:'레이저 VI',  dps:145000, width:42, len:138, cost:2080000, col:'#6b5a0f', top:'#ffe066', base:42, hh:46},
+  ],
+  laserCostMul:1.03,                            // 살수록 조금씩 비싸짐(포탑과 동일)
   launcherCost:180000, launcherCostMul:1.7,     // 발사기 : Lv1 1대 기준, 살수록 비싸짐
   launcherBuyPremium:1.15,                      // 상위 레벨 직접 구매 = 합체 비용 x1.15
   launcherMergeGold:5000000,                    // 발사기 합체 비용 : 500만 + 에너지 코일 1개
@@ -435,6 +451,17 @@ setPath(0);
 function baseNode(){ return WP[WP.length-1]; }
 
 // ---- 포탑 자리 : 길을 따라 좌/우로 번갈아 배치 ----
+// 가장 가까운 길 구간의 진행 방향 (레이저 빔을 길에 수직으로 놓기 위해)
+function pathAngleAt(x,y){
+  let best=1e9, ang=0;
+  for(let i=0;i<WP.length-1;i++){
+    const a=WP[i], b=WP[i+1], dx=b.x-a.x, dy=b.y-a.y, L2=dx*dx+dy*dy||1;
+    let u=((x-a.x)*dx+(y-a.y)*dy)/L2; u=Math.max(0,Math.min(1,u));
+    const d=Math.hypot(x-(a.x+dx*u), y-(a.y+dy*u));
+    if(d<best){ best=d; ang=Math.atan2(dy,dx); }
+  }
+  return ang+Math.PI/2;                                     // 길에 수직
+}
 function distToPath(x,y){
   let best=1e9;
   for(let i=0;i<WP.length-1;i++){
@@ -844,7 +871,7 @@ const G = {
   weaponTier:0, armorTier:0, shopOpen:false, potionField:[], buffs:{rageT:0,luckT:0,guardT:0},
   allies:[], enemies:[], shots:[], fx:[], nums:[], beams:[],
   turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1, anim:0, dropInfo:null,
-  launchersBought:0, coilsUsed:0, pathIndex:0, potBought:{}, dollBought:{},
+  launchersBought:0, coilsUsed:0, lasersBought:0, pathIndex:0, potBought:{}, dollBought:{},
   lastCp:null, cpList:[],
 };
 
@@ -914,7 +941,7 @@ function reset(){
   G.weaponTier=0; G.armorTier=0; G.shopOpen=false; G.potionField.length=0;
   G.levelOffset=0; G.buffs.rageT=0; G.buffs.luckT=0; G.buffs.guardT=0;
   G.turrets=[]; G.turretsBought=0; G.selTurret=null; G.stopCd=0; G.maxLevelSeen=1;
-  G.launchersBought=0; G.coilsUsed=0; G.potBought={}; G.dollBought={};
+  G.launchersBought=0; G.coilsUsed=0; G.lasersBought=0; G.potBought={}; G.dollBought={};
   G.allies=[]; for(let i=0;i<CFG.allyStart;i++) G.allies.push(newAlly());
   G.lastCp=null; G.cpList=[];
   hideBossLog();
@@ -935,7 +962,7 @@ function snapshot(){
     potBought:Object.assign({},G.potBought), dollBought:Object.assign({},G.dollBought),
     buffs:Object.assign({},G.buffs),
     allies:G.allies.map(a=>({hp:a.hp, dead:a.dead})),
-    turrets:G.turrets.map(t=>({kind:t.kind||'turret', tier:t.tier, x:t.x, y:t.y, coilT:t.coilT||0})),
+    turrets:G.turrets.map(t=>({kind:t.kind||'turret', tier:t.tier, x:t.x, y:t.y, coilT:t.coilT||0, ang:t.ang||0})),
     cpList:G.cpList.slice(), lastCp:G.lastCp
   };
 }
@@ -963,8 +990,9 @@ function restore(s){
     G.allies[i].dead=!!a.dead; G.allies[i].hp=Math.min(G.allies[i].maxHp, a.hp||G.allies[i].maxHp); });
   // 구조물
   G.turrets=(s.turrets||[]).map(t=>({
-    kind:t.kind==='launcher'?'launcher':undefined, tier:t.tier|0, x:t.x, y:t.y,
-    cd:0, shootFlash:0, aim:0, aimT:null, coilT:t.coilT||0 }));
+    kind:(t.kind==='launcher'||t.kind==='laser')?t.kind:undefined, tier:t.tier|0, x:t.x, y:t.y,
+    cd:0, shootFlash:0, aim:0, aimT:null, coilT:t.coilT||0,
+    ang:(t.kind==='laser'? (t.ang||pathAngleAt(t.x,t.y)) : 0), hitT:0, dealt:0 }));
   G.cpList=(s.cpList||[]).slice(); G.lastCp=s.lastCp||null;
   G.phase='paused'; G.selTurret=null;
   updateHUD();
@@ -998,8 +1026,15 @@ function reviveAtCheckpoint(){
 }
 // ---- 포탑 ----
 // 구조물 정의 : 일반 포탑은 등급표, 에너지 발사기는 전용 정의를 쓴다
-function tdef(t){ return t.kind==='launcher' ? CFG.launcherTiers[t.tier] : CFG.turretTiers[t.tier]; }
-function isLauncher(t){ return !!t && t.kind==='launcher'; }
+function kindOf(t){ return (t&&t.kind) || 'turret'; }
+function tdef(t){
+  const k=kindOf(t);
+  return k==='launcher' ? CFG.launcherTiers[t.tier]
+       : k==='laser'    ? CFG.laserTiers[t.tier]
+                        : CFG.turretTiers[t.tier];
+}
+function isLauncher(t){ return kindOf(t)==='launcher'; }
+function isLaser(t){ return kindOf(t)==='laser'; }
 function maxTier(t){ return (isLauncher(t)?CFG.launcherTiers:CFG.turretTiers).length-1; }
 function coilDurOf(t){ return tdef(t).coilDur || CFG.coilDur; }
 // 합체 결과 등급 (합칠 수 없으면 -1)
@@ -1007,7 +1042,8 @@ function coilDurOf(t){ return tdef(t).coilDur || CFG.coilDur; }
 //  발사기 : 레벨이 더해진다                      (Lv1+Lv1 = Lv2, Lv2+Lv1 = Lv3, Lv2+Lv2 = Lv4)
 function mergeResult(a,b){
   if(!a||!b||a===b) return -1;
-  if(isLauncher(a)!==isLauncher(b)) return -1;              // 포탑↔발사기는 섞이지 않음
+  if(kindOf(a)!==kindOf(b)) return -1;                      // 서로 다른 종류는 섞이지 않음
+  if(isLaser(a)) return -1;                                 // 레이저는 합체하지 않는다
   if(isLauncher(a)){
     const r=a.tier+b.tier+1;                                 // 0-based tier = 레벨-1
     return r<=maxTier(a) ? r : -1;                           // 최고 레벨을 넘으면 합체 불가
@@ -1094,6 +1130,80 @@ function buyTurret(tier){
   burst(s.x,s.y,CFG.turretTiers[tier].top,10);
   updateShop();
 }
+// ---- 레이저 ----
+function laserCost(tier){
+  return Math.round(CFG.laserTiers[tier||0].cost*Math.pow(CFG.laserCostMul, G.lasersBought));
+}
+function buyLaser(tier){
+  tier=Math.max(0,Math.min(CFG.laserTiers.length-1, tier|0));
+  if(G.phase==='over') return;
+  if(G.turrets.length>=CFG.turretMax){
+    floatText(baseNode().x,baseNode().y,'구조물은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
+  const cost=laserCost(tier); if(G.gold<cost) return;
+  const L=CFG.laserTiers[tier];
+  // 길 위(빔이 길을 가로지르도록)에 우선 배치
+  let sp=null;
+  for(const q of TSPOTS){
+    const c=nearestPathPoint(q.x,q.y);
+    if(canPlace(c.x,c.y,null,L.base)){ sp={x:c.x,y:c.y}; break; }
+  }
+  if(!sp) sp=spawnSpot(L.base);
+  if(!sp){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
+  G.gold-=cost; G.lasersBought++;
+  G.turrets.push({kind:'laser', tier, x:sp.x, y:sp.y, ang:pathAngleAt(sp.x,sp.y), hitT:0, dealt:0});
+  floatText(sp.x,sp.y,'📡 '+L.n+' 설치!',L.top);
+  burst(sp.x,sp.y,L.top,16);
+  updateShop();
+}
+// 길 위에서 가장 가까운 점 (레이저를 길 한가운데 놓기 위해)
+function nearestPathPoint(x,y){
+  let best=1e9, bx=x, by=y;
+  for(let i=0;i<WP.length-1;i++){
+    const a=WP[i], b=WP[i+1], dx=b.x-a.x, dy=b.y-a.y, L2=dx*dx+dy*dy||1;
+    let u=((x-a.x)*dx+(y-a.y)*dy)/L2; u=Math.max(0,Math.min(1,u));
+    const px=a.x+dx*u, py=a.y+dy*u, d=Math.hypot(x-px,y-py);
+    if(d<best){ best=d; bx=px; by=py; }
+  }
+  return {x:bx, y:by};
+}
+
+// ---- 레이저 ----
+function laserCost(tier){
+  return Math.round(CFG.laserTiers[tier||0].cost*Math.pow(CFG.laserCostMul, G.lasersBought));
+}
+function buyLaser(tier){
+  tier=Math.max(0,Math.min(CFG.laserTiers.length-1, tier|0));
+  if(G.phase==='over') return;
+  if(G.turrets.length>=CFG.turretMax){
+    floatText(baseNode().x,baseNode().y,'구조물은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
+  const cost=laserCost(tier); if(G.gold<cost) return;
+  const L=CFG.laserTiers[tier];
+  // 길 위(빔이 길을 가로지르도록)에 우선 배치
+  let sp=null;
+  for(const q of TSPOTS){
+    const c=nearestPathPoint(q.x,q.y);
+    if(canPlace(c.x,c.y,null,L.base)){ sp={x:c.x,y:c.y}; break; }
+  }
+  if(!sp) sp=spawnSpot(L.base);
+  if(!sp){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
+  G.gold-=cost; G.lasersBought++;
+  G.turrets.push({kind:'laser', tier, x:sp.x, y:sp.y, ang:pathAngleAt(sp.x,sp.y), hitT:0, dealt:0});
+  floatText(sp.x,sp.y,'📡 '+L.n+' 설치!',L.top);
+  burst(sp.x,sp.y,L.top,16);
+  updateShop();
+}
+// 길 위에서 가장 가까운 점 (레이저를 길 한가운데 놓기 위해)
+function nearestPathPoint(x,y){
+  let best=1e9, bx=x, by=y;
+  for(let i=0;i<WP.length-1;i++){
+    const a=WP[i], b=WP[i+1], dx=b.x-a.x, dy=b.y-a.y, L2=dx*dx+dy*dy||1;
+    let u=((x-a.x)*dx+(y-a.y)*dy)/L2; u=Math.max(0,Math.min(1,u));
+    const px=a.x+dx*u, py=a.y+dy*u, d=Math.hypot(x-px,y-py);
+    if(d<best){ best=d; bx=px; by=py; }
+  }
+  return {x:bx, y:by};
+}
+
 // ---- 에너지 병기 ----
 // 레벨이 더해지는 합체라 Lv(n) = Lv1 n대 분량. 포탑과 같은 원칙으로 가격을 맞춘다.
 function launcherUnits(tier){ return (tier||0)+1; }
@@ -1171,7 +1281,8 @@ function moveTurret(t,x,y){                             // 포탑을 원하는 �
   const s=placeSpot(x,y,t); if(!s) return false;
   burst(t.x,t.y,'#8ad3ff',6);
   t.x=s.x; t.y=s.y;
-  floatText(s.x,s.y,'↔ 포탑 이동','#8ad3ff');
+  if(isLaser(t)) t.ang=pathAngleAt(t.x,t.y);       // 빔은 항상 길을 가로지르게
+  floatText(s.x,s.y,'↔ '+(isLaser(t)?'레이저':'포탑')+' 이동','#8ad3ff');
   G.selTurret=null;
   return true;
 }
@@ -1195,6 +1306,7 @@ function sellTurret(){
   const t=G.selTurret || G.turrets[G.turrets.length-1];
   if(!t) return;
   const refund=Math.round((isLauncher(t) ? launcherBasePrice(t.tier)
+                          : isLaser(t)    ? CFG.laserTiers[t.tier].cost
                           : turretBasePrice(t.tier))*CFG.turretSellFrac);
   G.gold+=refund; G.turrets=G.turrets.filter(x=>x!==t); G.selTurret=null;
   floatText(t.x,t.y,'포탑 판매 💰+'+refund,'#ffd166');
@@ -1310,12 +1422,35 @@ function update(dt){
     }
   }
   for(const t of G.turrets){                     // 총구 조준(정지 중에도 계속 목표를 향함)
+    if(isLaser(t)) continue;
     const T=tdef(t);
     t.aimT=keepTarget(t.aimT,t.x,t.y,T.range);   // 사거리 안의 목표를 유지
     const aim=t.aimT||nearestEnemy(t.x,t.y,T.range*1.5);
     if(aim) t.aim=lerpAng(t.aim, Math.atan2(aim.y-t.y, aim.x-t.x), 1-Math.pow(1e-9,dt));
   }
+  // ---- 레이저 : 빔에 닿아 있는 적에게 계속 피해 ----
+  if(active) for(const t of G.turrets){
+    if(!isLaser(t)) continue;
+    const L=tdef(t), hl=L.len/2, hw=L.width/2;
+    const ca=Math.cos(t.ang), sa=Math.sin(t.ang);
+    let hit=0;
+    for(const e of G.enemies){
+      if(e.dead) continue;
+      const dx=e.x-t.x, dy=e.y-t.y;
+      if(Math.abs(dx*ca+dy*sa) > hl+e.r) continue;          // 빔 길이 밖
+      if(Math.abs(-dx*sa+dy*ca) > hw+e.r) continue;         // 빔 두께 밖
+      const dmg=L.dps*dt;
+      e.hp-=dmg; e.flash=Math.max(e.flash,0.06); t.dealt+=dmg; hit++;
+      if(e.hp<=0) e.dead=true;
+    }
+    t.hitT-=dt;
+    if(hit && t.hitT<=0){                                    // 누적 피해를 가끔 숫자로 표시
+      t.hitT=0.45; damageNum(t.x,t.y,t.dealt,L.top); t.dealt=0;
+      if(!REDUCE) burst(t.x,t.y,L.top,2);
+    }
+  }
   if(active) for(const t of G.turrets){          // 포탑도 함께 사격
+    if(isLaser(t)) continue;
     const T=tdef(t);
     t.cd-=dt; if(t.shootFlash>0) t.shootFlash-=dt;
     if(isLauncher(t)){                           // ---- 에너지 발사기 : 코일이 있어야 발사 ----
@@ -1522,8 +1657,49 @@ function draw(){
   if(G.phase==='paused'){ banner('정비 중 — 골드로 강화하고 “시작”으로 재개','#ffd166');
     if(G.stopCd>0) subline('끝내기 쿨타임 '+Math.ceil(G.stopCd)+'초 (게임 진행 중 감소)','#ff8a97',52); }
 }
+// ---- 레이저 그리기 : 양쪽 기둥 + 길을 가로지르는 빔 ----
+function drawLaser(g,t){
+  const L=tdef(t), sel=(G.selTurret===t), ang=t.ang||0;
+  const ca=Math.cos(ang), sa=Math.sin(ang), hl=L.len/2;
+  const ax=t.x-ca*hl, ay=t.y-sa*hl, bx=t.x+ca*hl, by=t.y+sa*hl;   // 빔 양끝
+  const pulse=0.72+0.28*Math.sin(G.anim*11);
+  if(sel){
+    g.strokeStyle='#ffd166'; g.lineWidth=Math.max(1,2.5*CAM.scale);
+    g.beginPath(); g.ellipse(isoX(t.x,t.y),isoY(t.x,t.y,1),
+      (L.base*0.8)*ISO_X*1.42*CAM.scale,(L.base*0.8)*ISO_Y*1.42*CAM.scale,0,0,7); g.stroke();
+  }
+  const P=[], add=(x,y,z,len,wid,h,c,a)=>P.push({x,y,z,len,wid,h,c,a:(a===undefined?0:a)});
+  for(const [px,py] of [[ax,ay],[bx,by]]){                        // 발신기·반사기 기둥
+    add(px,py,0,L.base*0.62,L.base*0.62,7,'#5b6478');
+    add(px,py,7,L.base*0.44,L.base*0.44,L.hh,L.col,ang);
+    add(px,py,7+L.hh,L.base*0.52,L.base*0.52,6,L.top,ang);
+  }
+  add(t.x,t.y,7+L.hh*0.55,L.len,L.width*0.5,3.5,L.col,ang);       // 빔 받침(어두운 심)
+  P.sort((q,r)=> (depthOf(q.x,q.y)-depthOf(r.x,r.y)) || q.z-r.z);
+  for(const q of P) rbox(g,q.x,q.y,q.z,q.len,q.wid,q.h,q.a,q.c);
+  // 빔 : 화면 공간에 굵은 발광선으로
+  const z=7+L.hh*0.55+3;
+  const x1=isoX(ax,ay), y1=isoY(ax,ay,z), x2=isoX(bx,by), y2=isoY(bx,by,z);
+  g.lineCap='round';
+  g.globalAlpha=0.34*pulse; g.strokeStyle=L.top;
+  g.lineWidth=Math.max(4, L.width*0.9*ISO_Y*1.42*CAM.scale);
+  g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+  g.globalAlpha=0.95*pulse; g.lineWidth=Math.max(2, L.width*0.30*ISO_Y*1.42*CAM.scale);
+  g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+  g.globalAlpha=1; g.strokeStyle='#ffffff';
+  g.lineWidth=Math.max(1, L.width*0.10*ISO_Y*1.42*CAM.scale);
+  g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+  g.lineCap='butt';
+  // 라벨
+  const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,7+L.hh+26);
+  g.textAlign='center'; g.font='bold '+Math.max(9,11*CAM.scale)+'px Segoe UI';
+  g.lineWidth=3; g.strokeStyle='rgba(0,0,0,.65)';
+  const lb='Lv'+(t.tier+1)+' 레이저';
+  g.strokeText(lb,sx,sy); g.fillStyle=L.top; g.fillText(lb,sx,sy);
+}
 // ---- 포탑 그리기 : 등급마다 크기·모양이 다르고, 총구가 적을 향해 돌아감 ----
 function drawTurret(g,t){
+  if(isLaser(t)){ drawLaser(g,t); return; }
   const T=tdef(t), sel=(G.selTurret===t);
   const ang=t.aim||0, ca=Math.cos(ang), sa=Math.sin(ang);
   const recoil=(t.shootFlash>0? t.shootFlash*26 : 0);         // 발사 반동(총열이 뒤로 밀림)
@@ -1759,6 +1935,7 @@ function updateShop(){
   mb.disabled=(pair<0 && (!nrgPair || G.gold<launcherMergeCost()));
   const sb=document.getElementById('sellTurret'), st=G.selTurret||G.turrets[G.turrets.length-1];
   sb.textContent = st ? ('♻ 판매\n'+tdef(st).n+' 💰+'+Math.round((isLauncher(st)?launcherBasePrice(st.tier)
+                            :isLaser(st)?CFG.laserTiers[st.tier].cost
                             :turretBasePrice(st.tier))*CFG.turretSellFrac).toLocaleString())
                       : '♻ 판매\n보유 구조물 없음';
   sb.style.whiteSpace='pre-line'; sb.disabled=!st;
@@ -1766,8 +1943,21 @@ function updateShop(){
   for(const t of G.turrets) if(!isLauncher(t)) counts[t.tier]++;
   const lch=G.turrets.filter(isLauncher);
   const chips=counts.map((c,i)=>c?'<span class="tchip">Lv'+(i+1)+' '+CFG.turretTiers[i].n+' <b>×'+c+'</b></span>':'').join('')
+    + G.turrets.filter(isLaser).map(t=>'<span class="tchip">📡 Lv'+(t.tier+1)+' 레이저</span>').join('')
     + lch.map(t=>'<span class="tchip">⚡ Lv'+(t.tier+1)+' 발사기 <b>'+(t.coilT>0?Math.ceil(t.coilT)+'초':'코일 없음')+'</b></span>').join('');
   document.getElementById('turList').innerHTML = chips || '<span class="tchip">보유 구조물 없음</span>';
+
+  // 레이저
+  for(let i=0;i<CFG.laserTiers.length;i++){
+    const L=CFG.laserTiers[i], b=document.getElementById('buyLsr_'+i), c=laserCost(i);
+    b.textContent='Lv'+(i+1)+' 레이저\n초당 '+L.dps.toLocaleString()+' 피해\n💰'+c.toLocaleString();
+    b.disabled = full || G.gold<c;
+    b.style.borderLeft='4px solid '+L.top;
+  }
+  const nL=G.turrets.filter(isLaser).length;
+  document.getElementById('laserInfo').textContent =
+    '보유 '+nL+'대 · 사면 길 위에 자동으로 놓이고 빔이 길을 가로지릅니다. '
+    +'좌클릭으로 고른 뒤 원하는 곳을 클릭하면 옮겨지고, 빔 방향은 그 자리의 길에 맞춰 자동으로 돌아갑니다.';
 
   // 에너지 병기
   const cc=coilCost(), bc=document.getElementById('buyCoil');
@@ -2004,6 +2194,7 @@ function endDrag(ev){
     } else {
       const s=placeSpot(dragT.x,dragT.y,dragT);              // 어디에 놓든 그 자리(또는 바로 옆)에 배치
       if(s){ dragT.x=s.x; dragT.y=s.y;
+        if(isLaser(dragT)) dragT.ang=pathAngleAt(dragT.x,dragT.y);
         burst(s.x,s.y,'#8ad3ff',6); floatText(s.x,s.y,'↔ 포탑 이동','#8ad3ff'); G.selTurret=null;
         if(over){ const msg=mergeFailMsg(dragT,over); if(msg) floatText(over.x,over.y,msg,'#c8b4ff'); }
       } else { dragT.x=dragFrom.x; dragT.y=dragFrom.y; }     // (맵이 꽉 찬 극단적 경우만)
@@ -2111,6 +2302,15 @@ document.getElementById('shopClose').onclick=closeShop;
   });
 })();
 document.getElementById('mergeTurret').onclick=()=>{ autoMerge(); updateShop(); };
+(function buildLaserShop(){                      // 레벨별 레이저 구매 버튼
+  const grid=document.getElementById('laserBuyGrid');
+  CFG.laserTiers.forEach((L,i)=>{
+    const b=document.createElement('button');
+    b.id='buyLsr_'+i; b.className='buy lsr'; b.style.whiteSpace='pre-line';
+    b.onclick=()=>buyLaser(i);
+    grid.appendChild(b);
+  });
+})();
 (function buildLauncherShop(){                    // 레벨별 발사기 구매 버튼
   const grid=document.getElementById('nrgBuyGrid');
   CFG.launcherTiers.forEach((L,i)=>{
