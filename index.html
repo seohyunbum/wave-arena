@@ -355,26 +355,27 @@ const CFG = {
           {n:'천공 갑옷',def:940,cost:235782},   // 피해 경감 94%
           {n:'창조 갑옷',def:1140,cost:459774}],   // 피해 경감 95%
   potionLinger:4,                                   // 물약 장 지속(초): 이 시간 동안 스폰되는 적도 확률 적용
-  potionCostMul:1.16, dollCostMul:1.20,             // 소모품은 같은 종류를 살수록 비싸진다
+  potionCostMul:1.16, dollCostMul:1.35,             // 소모품은 같은 종류를 살수록 비싸진다(인형은 더 가파르게)
   potions:[{key:'slow',n:'감속 물약',desc:'이속 -50%·5초',cost:30,prob:0.65},
            {key:'poison',n:'독 물약',desc:'지속 피해·6초',cost:55,prob:0.70},
            {key:'weak',n:'약화 물약',desc:'공격력 -50%·6초',cost:70,prob:0.60},
            {key:'freeze',n:'빙결 물약',desc:'완전 정지·3초',cost:130,prob:0.50},
            {key:'heal',n:'치유 물약',desc:'아군 전체 HP 60% 회복',cost:90,type:'heal',healFrac:0.6}],
   // ---- 인형(부적) : 포션보다 강력한 상위 아이템 ----
-  burnFrac:0.11, burnDur:6,                          // 화상 초당 피해(최대체력 비율)·지속
-  reviveFrac:0.5, curseFrac:0.4, freezeDollDur:4,    // 부활 회복률·저주 즉발피해율·빙결인형 지속
-  rageDur:10, rageDmg:1.6, rageFire:0.6,             // 분노: 지속·공격력배율·공격간격배율(↓=빠름)
-  luckDur:12, luckMult:2, guardDur:10, guardDef:120, // 행운: 지속·골드배율 / 수호: 지속·추가방어
-  dolls:[{key:'revive',  n:'부활인형', desc:'죽은 아군 전원 부활', cost:170},
-         {key:'heal',    n:'치유인형', desc:'아군 전원 HP 완전 회복', cost:120},
-         {key:'flame',   n:'화염인형', desc:'모든 적에게 화상', cost:110},
-         {key:'curse',   n:'저주인형', desc:'모든 적 즉시 큰 피해', cost:140},
-         {key:'illusion',n:'환각인형', desc:'난이도 1레벨 감소', cost:120},
-         {key:'freeze',  n:'빙결인형', desc:'모든 적 확정 빙결', cost:150},
-         {key:'rage',    n:'분노인형', desc:'10초간 아군 화력↑', cost:130},
-         {key:'luck',    n:'행운인형', desc:'12초간 골드 2배', cost:100},
-         {key:'guard',   n:'수호인형', desc:'10초간 아군 피해↓', cost:120}],
+  burnFrac:0.095, burnDur:5,                         // 화상 초당 피해(최대체력 비율)·지속
+  reviveFrac:0.4, curseFrac:0.33, freezeDollDur:3.2, // 부활 회복률·저주 즉발피해율·빙결인형 지속
+  healDollFrac:0.8,                                  // 치유인형 회복률(완전회복 → 80%)
+  rageDur:8, rageDmg:1.5, rageFire:0.65,             // 분노: 지속·공격력배율·공격간격배율(↓=빠름)
+  luckDur:10, luckMult:2, guardDur:8, guardDef:100,  // 행운: 지속·골드배율 / 수호: 지속·추가방어
+  dolls:[{key:'revive',  n:'부활인형', desc:'죽은 아군 전원 부활(HP 40%)', cost:20000},
+         {key:'heal',    n:'치유인형', desc:'아군 전원 HP 80% 회복', cost:9000},
+         {key:'flame',   n:'화염인형', desc:'모든 적에게 화상·5초', cost:7000},
+         {key:'curse',   n:'저주인형', desc:'모든 적 즉시 큰 피해', cost:11000},
+         {key:'illusion',n:'환각인형', desc:'난이도 1레벨 감소', cost:25000},
+         {key:'freeze',  n:'빙결인형', desc:'모든 적 확정 빙결·3.2초', cost:12000},
+         {key:'rage',    n:'분노인형', desc:'8초간 아군 화력↑', cost:9000},
+         {key:'luck',    n:'행운인형', desc:'10초간 골드 2배', cost:6000},
+         {key:'guard',   n:'수호인형', desc:'8초간 아군 피해↓', cost:8000}],
 };
 
 // ---- 월드(고정 좌표계) : 화면 크기와 무관하게 밸런스 일정 ----
@@ -1813,7 +1814,8 @@ function buyDoll(key){
   const b=baseNode();
   if(key==='revive'){ let n=0; for(const a of G.allies){ if(a.dead){ a.dead=false; a.hp=a.maxHp*CFG.reviveFrac; n++; } }
     layoutAllies(); floatText(b.x,b.y,'부활인형 → '+n+'명 부활!','#8ad3ff'); }
-  else if(key==='heal'){ for(const a of G.allies){ if(!a.dead) a.hp=a.maxHp; } floatText(b.x,b.y,'치유인형 → 전원 완전회복!','#7CFC00'); }
+  else if(key==='heal'){ for(const a of G.allies){ if(!a.dead) a.hp=Math.min(a.maxHp, a.hp+a.maxHp*CFG.healDollFrac); }
+    floatText(b.x,b.y,'치유인형 → 전원 HP '+Math.round(CFG.healDollFrac*100)+'% 회복!','#7CFC00'); }
   else if(key==='flame'){ for(const e of G.enemies) e.burnT=Math.max(e.burnT,CFG.burnDur); floatText(b.x,b.y,'화염인형 → 전체 화상!','#ff7a1a'); }
   else if(key==='curse'){ for(const e of G.enemies){ e.hp-=e.maxHp*CFG.curseFrac; e.flash=0.15; if(e.hp<=0) e.dead=true; } floatText(b.x,b.y,'저주인형 → 전체 큰 피해!','#b06bff'); }
   else if(key==='illusion'){ G.levelOffset++; floatText(b.x,b.y,'환각인형 → 난이도 -1','#a7e0ff'); }
