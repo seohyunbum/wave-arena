@@ -68,6 +68,8 @@
   .buy.heal{background:#1f6b4a}
   .buy.doll{background:#4a2f6b}
   .buy.tur{background:#1f4a6b}
+  .buy.nrg{background:#123a5c; border:1px solid #2f7fb0}
+  .buy.coil{background:#0f5550; border:1px solid #2fb0a4}
   .buy.merge{background:#6b5a1f}
   .tlist{display:flex; flex-wrap:wrap; gap:4px; margin-top:8px}
   .tchip{font-size:11px; background:#0e1428; border:1px solid #2b3552; border-radius:8px; padding:3px 7px; color:var(--muted)}
@@ -132,6 +134,14 @@
       <div class="thint">포탑을 끌어서 <b style="color:#8ad3ff">아무 곳에나</b> 놓을 수 있습니다(길 위도 가능).
         같은 레벨 포탑 위에 놓으면 <b style="color:#ffd166">합체</b>.
         탭으로 고른 뒤 원하는 곳을 탭해도 옮겨집니다.</div>
+    </div>
+    <div class="ssec">
+      <h3>에너지 병기 <small>합체 불가 · 코일을 넣으면 60초간 초당 1발, 무엇이든 한 방</small></h3>
+      <div class="pots">
+        <button id="buyLauncher" class="buy nrg"></button>
+        <button id="buyCoil" class="buy coil"></button>
+      </div>
+      <div class="thint" id="nrgInfo"></div>
     </div>
     <div class="ssec">
       <h3>무기 <small id="weaponCur"></small></h3>
@@ -216,6 +226,13 @@ const CFG = {
      base:56, body:31, hh:48, bl:34, bw:10.0, bn:2, splash:96, burn:4, slow:3},
   ],
   turretSplashFrac:0.5,
+  // ---- 에너지 병기 : 합체되지 않는 특수 구조물 ----
+  // 에너지 코일을 넣으면 60초간 초당 1발, 맞으면 무엇이든 즉시 소멸
+  launcher:{n:'에너지 발사기', range:520, fire:1.0, col:'#16365c', top:'#5ce1ff',
+            base:58, body:30, hh:46, bl:36, bw:12, bn:1, style:'energy'},
+  launcherCost:180000, launcherCostMul:1.7,     // 발사기(구조물) : 살수록 비싸짐
+  coilCost:90000, coilCostMul:1.25,             // 코일(소모품) : 쓸수록 비싸짐
+  coilDur:60, coilFire:1.0,                     // 지속 60초 · 초당 1발
   // ---- 보스 (스테이지 5마다) ----
   bossEvery:5, bossHpMult:12, bossDmgMult:2.6, bossSpeedMult:0.72, bossRMult:2.4, bossReward:60, bossGoldBase:90,
   // ---- 상점 ----
@@ -541,8 +558,9 @@ const G = {
   phase:'idle', time:0, level:1, kills:0, gold:0,
   upTotal:0, upToward:0, spawnTimer:0, nextBossLevel:5, levelOffset:0,
   weaponTier:0, armorTier:0, shopOpen:false, potionField:[], buffs:{rageT:0,luckT:0,guardT:0},
-  allies:[], enemies:[], shots:[], fx:[], nums:[],
+  allies:[], enemies:[], shots:[], fx:[], nums:[], beams:[],
   turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1, anim:0, dropInfo:null,
+  launchersBought:0, coilsUsed:0,
 };
 
 // ---- 기록(하이스코어) : localStorage 영속 ----
@@ -596,16 +614,25 @@ function applyAllyStats(){
   }
 }
 function reset(){
-  G.enemies.length=G.shots.length=G.fx.length=G.nums.length=0;
+  G.enemies.length=G.shots.length=G.fx.length=G.nums.length=G.beams.length=0;
   G.time=0; G.level=1; G.kills=0; G.gold=CFG.goldStart;
   G.upTotal=0; G.upToward=0; G.spawnTimer=0; G.nextBossLevel=CFG.bossEvery; G.phase='idle';
   G.weaponTier=0; G.armorTier=0; G.shopOpen=false; G.potionField.length=0;
   G.levelOffset=0; G.buffs.rageT=0; G.buffs.luckT=0; G.buffs.guardT=0;
   G.turrets=[]; G.turretsBought=0; G.selTurret=null; G.stopCd=0; G.maxLevelSeen=1;
+  G.launchersBought=0; G.coilsUsed=0;
   G.allies=[]; for(let i=0;i<CFG.allyStart;i++) G.allies.push(newAlly());
   layoutAllies();
 }
 // ---- 포탑 ----
+// 구조물 정의 : 일반 포탑은 등급표, 에너지 발사기는 전용 정의를 쓴다
+function tdef(t){ return t.kind==='launcher' ? CFG.launcher : CFG.turretTiers[t.tier]; }
+function isLauncher(t){ return !!t && t.kind==='launcher'; }
+// 합체 가능 여부 : 에너지 병기는 절대 합체되지 않는다
+function canMerge(a,b){
+  return !!a && !!b && a!==b && !isLauncher(a) && !isLauncher(b)
+         && a.tier===b.tier && a.tier<CFG.turretTiers.length-1;
+}
 // 등급별 가격 : 등급이 높을수록 비싸고, 많이 살수록 조금씩 비싸짐
 function turretCost(tier){
   return Math.round(CFG.turretCost0*Math.pow(CFG.turretTierCostMul,tier||0)
@@ -658,12 +685,40 @@ function buyTurret(tier){
   burst(s.x,s.y,CFG.turretTiers[tier].top,10);
   updateShop();
 }
+// ---- 에너지 병기 ----
+function launcherCost(){ return Math.round(CFG.launcherCost*Math.pow(CFG.launcherCostMul,G.launchersBought)); }
+function coilCost(){ return Math.round(CFG.coilCost*Math.pow(CFG.coilCostMul,G.coilsUsed)); }
+function buyLauncher(){
+  if(G.phase==='over') return;
+  if(G.turrets.length>=CFG.turretMax){
+    floatText(baseNode().x,baseNode().y,'구조물은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
+  const cost=launcherCost(); if(G.gold<cost) return;
+  const s=spawnSpot(); if(!s){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
+  G.gold-=cost; G.launchersBought++;
+  G.turrets.push({kind:'launcher', tier:0, x:s.x, y:s.y, cd:0, shootFlash:0, aim:0, aimT:null, coilT:0});
+  floatText(s.x,s.y,'⚡ 에너지 발사기 설치!','#5ce1ff');
+  burst(s.x,s.y,'#5ce1ff',16);
+  updateShop();
+}
+function buyCoil(){
+  const L=G.turrets.filter(isLauncher);
+  if(!L.length){ floatText(baseNode().x,baseNode().y,'먼저 에너지 발사기를 설치하세요','#ff8a97'); return; }
+  const cost=coilCost(); if(G.gold<cost) return;
+  // 고른 발사기 우선 → 없으면 비어있는 발사기 → 그것도 없으면 남은 시간이 가장 적은 것
+  let t = isLauncher(G.selTurret) ? G.selTurret
+        : (L.find(x=>x.coilT<=0) || L.slice().sort((a,b)=>a.coilT-b.coilT)[0]);
+  G.gold-=cost; G.coilsUsed++;
+  t.coilT+=CFG.coilDur;                       // 충전 중이면 시간 연장
+  t.cd=0;
+  floatText(t.x,t.y,'⚡ 코일 장착! '+Math.round(t.coilT)+'초','#7cf3ff');
+  burst(t.x,t.y,'#7cf3ff',24);
+  updateShop();
+}
 // 총구 높이 : 발사체가 총열 끝에서 나가도록
-function muzzleZ(t){ const T=CFG.turretTiers[t.tier];      // drawTurret 의 총열 높이와 동일
+function muzzleZ(t){ const T=tdef(t);                      // drawTurret 의 총열 높이와 동일
   return 8+t.tier*0.8 + T.hh + (10+t.tier*1.4)*0.30; }
 function mergeTurrets(src,dst){
-  if(!src||!dst||src===dst||src.tier!==dst.tier) return false;
-  if(dst.tier>=CFG.turretTiers.length-1) return false;
+  if(!canMerge(src,dst)) return false;          // 에너지 병기는 합체 대상이 아님
   dst.tier++; dst.cd=0;
   G.turrets=G.turrets.filter(t=>t!==src);
   G.selTurret=null;
@@ -683,7 +738,7 @@ function moveTurret(t,x,y){                             // 포탑을 원하는 �
 function autoMerge(){                                   // 가능한 쌍 중 가장 높은 등급끼리 합체
   const max=CFG.turretTiers.length-1;
   for(let tier=max-1; tier>=0; tier--){
-    const list=G.turrets.filter(t=>t.tier===tier);
+    const list=G.turrets.filter(t=>!isLauncher(t) && t.tier===tier);
     if(list.length>=2) return mergeTurrets(list[0],list[1]);
   }
   floatText(baseNode().x,baseNode().y,'합체할 같은 레벨 포탑이 없습니다','#ff8a97');
@@ -692,7 +747,8 @@ function autoMerge(){                                   // 가능한 쌍 중 가
 function sellTurret(){
   const t=G.selTurret || G.turrets[G.turrets.length-1];
   if(!t) return;
-  const refund=Math.round(CFG.turretCost0*Math.pow(CFG.turretTierCostMul,t.tier)*CFG.turretSellFrac);
+  const refund=Math.round((isLauncher(t) ? CFG.launcherCost
+                          : CFG.turretCost0*Math.pow(CFG.turretTierCostMul,t.tier))*CFG.turretSellFrac);
   G.gold+=refund; G.turrets=G.turrets.filter(x=>x!==t); G.selTurret=null;
   floatText(t.x,t.y,'포탑 판매 💰+'+refund,'#ffd166');
   updateShop();
@@ -795,14 +851,34 @@ function update(dt){
     }
   }
   for(const t of G.turrets){                     // 총구 조준(정지 중에도 계속 목표를 향함)
-    const T=CFG.turretTiers[t.tier];
+    const T=tdef(t);
     t.aimT=keepTarget(t.aimT,t.x,t.y,T.range);   // 사거리 안의 목표를 유지
     const aim=t.aimT||nearestEnemy(t.x,t.y,T.range*1.5);
     if(aim) t.aim=lerpAng(t.aim, Math.atan2(aim.y-t.y, aim.x-t.x), 1-Math.pow(1e-9,dt));
   }
   if(active) for(const t of G.turrets){          // 포탑도 함께 사격
-    const T=CFG.turretTiers[t.tier];
+    const T=tdef(t);
     t.cd-=dt; if(t.shootFlash>0) t.shootFlash-=dt;
+    if(isLauncher(t)){                           // ---- 에너지 발사기 : 코일이 있어야 발사 ----
+      if(t.coilT>0 && G.phase==='running'){      // 정비 중(끝내기)에는 코일이 닳지 않는다
+        t.coilT-=dt;
+        if(t.coilT<=0){ t.coilT=0; floatText(t.x,t.y,'에너지 코일 소진','#ff8a97'); }
+      }
+      if(t.coilT>0 && t.cd<=0){
+        const e=t.aimT;
+        if(e){
+          t.cd=CFG.coilFire; t.shootFlash=0.3;
+          t.aim=Math.atan2(e.y-t.y, e.x-t.x);
+          const mz=muzzleZ(t), off=T.base*0.2+T.bl;
+          G.beams.push({x1:t.x+Math.cos(t.aim)*off, y1:t.y+Math.sin(t.aim)*off, z1:mz,
+                        x2:e.x, y2:e.y, z2:26, t:0, life:0.3});
+          e.hp=-1; e.dead=true; e.flash=0.2;     // 무한 데미지 : 보스도 한 방
+          floatText(e.x,e.y,'⚡ 소멸','#7cf3ff');
+          burst(e.x,e.y,'#7cf3ff',18);
+        }
+      }
+      continue;
+    }
     if(t.cd<=0){ const e=t.aimT;                 // 바라보고 있는 그 적을 쏜다
       if(e){ t.cd=T.fire*(rage?CFG.rageFire:1); t.shootFlash=0.1;
         t.aim=Math.atan2(e.y-t.y, e.x-t.x);                        // 발사 순간엔 정확히 조준
@@ -873,6 +949,7 @@ function update(dt){
   for(const f of G.fx){ f.t+=dt; f.x+=f.vx*dt; f.y+=f.vy*dt; f.z+=f.vz*dt; f.vz-=320*dt;
     if(f.z<0){ f.z=0; f.vz*=-0.35; } f.vx*=.93; f.vy*=.93; }
   G.fx=G.fx.filter(f=>f.t<f.life);
+  if(G.beams.length){ for(const bm of G.beams) bm.t+=dt; G.beams=G.beams.filter(bm=>bm.t<bm.life); }
   for(const n of G.nums){ n.t+=dt; n.rise+=(n.big?34:26)*dt; }
   G.nums=G.nums.filter(n=>n.t<(n.big?0.9:0.7));
 
@@ -889,15 +966,15 @@ function draw(){
     const t=G.selTurret, d=G.dropInfo;
     const col = d.merge ? '255,209,102' : '56,232,176';
     const ring=(x,y,tier)=>{
-      const R=Math.max(CFG.turretGap, CFG.turretTiers[tier].base*0.8);   // 받침보다 크게 → 가려지지 않음
+      const R=Math.max(CFG.turretGap, tier.base*0.8);   // 받침보다 크게 → 가려지지 않음
       const rx=R*ISO_X*1.42*CAM.scale, ry=R*ISO_Y*1.42*CAM.scale;
       ctx.fillStyle='rgba('+col+',.22)';
       ctx.beginPath(); ctx.ellipse(isoX(x,y),isoY(x,y,1), rx, ry,0,0,7); ctx.fill();
       ctx.strokeStyle='rgba('+col+',.95)'; ctx.lineWidth=Math.max(1,2.5*CAM.scale);
       ctx.beginPath(); ctx.ellipse(isoX(x,y),isoY(x,y,1), rx, ry,0,0,7); ctx.stroke();
     };
-    if(d.merge){ ring(t.x,t.y,t.tier); ring(d.merge.x,d.merge.y,d.merge.tier); }
-    else if(d.land) ring(d.land.x, d.land.y, t.tier);
+    if(d.merge){ ring(t.x,t.y,tdef(t)); ring(d.merge.x,d.merge.y,tdef(d.merge)); }
+    else if(d.land) ring(d.land.x, d.land.y, tdef(t));
   }
 
   // 적이 많으면 캐릭터 디테일을 낮춰 프레임 유지 (보스는 항상 선명하게)
@@ -947,6 +1024,20 @@ function draw(){
     }
   }
 
+  // 에너지 빔 (발사기 → 소멸시킨 적)
+  for(const bm of G.beams){
+    const a=Math.max(0,1-bm.t/bm.life);
+    const x1=isoX(bm.x1,bm.y1), y1=isoY(bm.x1,bm.y1,bm.z1);
+    const x2=isoX(bm.x2,bm.y2), y2=isoY(bm.x2,bm.y2,bm.z2);
+    ctx.globalAlpha=a*0.55; ctx.strokeStyle='#5ce1ff';
+    ctx.lineWidth=Math.max(3,11*CAM.scale)*a+2; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.globalAlpha=a; ctx.strokeStyle='#ffffff';
+    ctx.lineWidth=Math.max(1,3.5*CAM.scale)*a+1;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.globalAlpha=1; ctx.lineCap='butt';
+  }
+
   // 데미지 숫자 (화면공간)
   ctx.textAlign='center';
   for(const n of G.nums){
@@ -968,7 +1059,7 @@ function draw(){
 }
 // ---- 포탑 그리기 : 등급마다 크기·모양이 다르고, 총구가 적을 향해 돌아감 ----
 function drawTurret(g,t){
-  const T=CFG.turretTiers[t.tier], sel=(G.selTurret===t);
+  const T=tdef(t), sel=(G.selTurret===t);
   const ang=t.aim||0, ca=Math.cos(ang), sa=Math.sin(ang);
   const recoil=(t.shootFlash>0? t.shootFlash*26 : 0);         // 발사 반동(총열이 뒤로 밀림)
   const hot=t.shootFlash>0;
@@ -1015,6 +1106,19 @@ function drawTurret(g,t){
     for(const q of [-1,1]){ const p=side(bw*0.7*q,-3);
       add(p[0],p[1],headZ-2,4,4,22,'#9fe4ff',ang); }
     if(Math.sin(G.anim*9)>0.4) add(t.x,t.y,headZ+headH+20,7,7,7,'#e8f9ff');
+  } else if(S==='energy'){                                    // 에너지 발사기 : 코일 챔버 + 방출구
+    const on=t.coilT>0, pulse=0.5+0.5*Math.sin(G.anim*(on?7:1.5));
+    add(t.x,t.y,baseH,bw*0.86,bw*0.86,T.hh,T.col);                        // 본체 기둥
+    for(const q of [-1,1]){ const p=side(bw*0.8*q,-4);                    // 양옆 방열 파일런
+      add(p[0],p[1],baseH+4,11,9,T.hh*0.72,'#0e2745',ang); }
+    // 코일 챔버 : 코일이 들어있으면 밝게 빛나며 회전
+    const coilCol = on ? (pulse>0.5?'#9df3ff':'#5ce1ff') : '#2b3f5c';
+    add(t.x,t.y,baseH+T.hh*0.34,bw*1.18,bw*1.18,7,'#0b1c33');
+    add(t.x,t.y,baseH+T.hh*0.45,13,13,15,coilCol, on?G.anim*2.2:0);       // 코일 본체
+    if(on){                                                               // 충전 링
+      add(t.x,t.y,baseH+T.hh*0.45+16,20,20,3,'#9df3ff', -G.anim*1.7);
+      add(t.x,t.y,baseH+T.hh*0.45-4,18,18,3,'#9df3ff',  G.anim*1.3);
+    }
   } else {                                                    // Lv7 : 용의 포탑 - 날개 + 뿔
     add(t.x,t.y,baseH,bw*0.9,bw*0.9,T.hh,T.col);
     add(t.x,t.y,baseH+T.hh*0.46,bw*1.25,bw*1.25,7,'#4d0a1f');
@@ -1028,22 +1132,31 @@ function drawTurret(g,t){
   add(t.x,t.y,headZ,T.base*0.64,T.base*0.58,headH, hot?'#ffffff':T.top, ang);
   const bl=T.bl, bwid=T.bw, bz=headZ+headH*0.30, root=T.base*0.2-recoil*0.35;
   const offs = T.bn===1 ? [0] : T.bn===2 ? [-bwid*0.8, bwid*0.8] : [-bwid*1.45,0,bwid*1.45];
+  const nrg=isLauncher(t), charged=nrg&&t.coilT>0;
   for(const so of offs){
     const c=side(so, root+bl*0.5);
-    add(c[0],c[1],bz,bl,bwid,bwid, hot?'#fff3c4':'#4a5364', ang);         // 총열
+    add(c[0],c[1],bz,bl,bwid,bwid, hot?'#fff3c4':(nrg?'#24507e':'#4a5364'), ang);   // 총열/방출관
     const m=side(so, root+bl);
-    add(m[0],m[1],bz-bwid*0.25,bwid*0.9,bwid*1.45,bwid*1.45, hot?'#ffffff':'#39404f', ang);  // 총구
-    if(hot){ const f=side(so, root+bl+bwid*1.2);                          // 총구 화염
-      add(f[0],f[1],bz-bwid*0.25,8,bwid*1.15,bwid*1.15,'#ffe08a', ang); }
+    add(m[0],m[1],bz-bwid*0.25,bwid*0.9,bwid*1.45,bwid*1.45,
+        hot?'#ffffff':(charged?'#5ce1ff':(nrg?'#16324f':'#39404f')), ang);          // 총구/방출구
+    if(nrg&&charged){                                                     // 방출관 에너지 링
+      for(const u of [0.35,0.62,0.88]){ const r=side(so, root+bl*u);
+        add(r[0],r[1],bz-1,3.5,bwid*1.3,bwid*1.3,'#7cf3ff', ang); }
+    }
+    if(hot){ const f=side(so, root+bl+bwid*1.2);                          // 총구 화염 / 방출 섬광
+      add(f[0],f[1],bz-bwid*0.25,8,bwid*1.15,bwid*1.15, nrg?'#e8ffff':'#ffe08a', ang); }
   }
   P.sort((a,b)=> (depthOf(a.x,a.y)-depthOf(b.x,b.y)) || a.z-b.z);
   for(const q of P) rbox(g,q.x,q.y,q.z,q.len,q.wid,q.h,q.a,q.c);
 
-  // 레벨 라벨
+  // 라벨 : 일반 포탑=등급 / 에너지 발사기=남은 코일 시간
   const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,headZ+headH+(T.style==='dragon'?34:22));
+  const label = isLauncher(t) ? (t.coilT>0 ? '⚡'+Math.ceil(t.coilT)+'초' : '코일 없음')
+                              : 'Lv'+(t.tier+1);
+  const lcol  = isLauncher(t) ? (t.coilT>0?'#7cf3ff':'#8b97b8') : T.top;
   g.textAlign='center'; g.font='bold '+Math.max(9,11*CAM.scale)+'px Segoe UI';
   g.lineWidth=3; g.strokeStyle='rgba(0,0,0,.65)';
-  g.strokeText('Lv'+(t.tier+1),sx,sy); g.fillStyle=T.top; g.fillText('Lv'+(t.tier+1),sx,sy);
+  g.strokeText(label,sx,sy); g.fillStyle=lcol; g.fillText(label,sx,sy);
 }
 function hpBar(x,y,z,frac,col){
   const sx=isoX(x,y), sy=isoY(x,y,z), w=34*CAM.scale, h=5*CAM.scale;
@@ -1074,6 +1187,8 @@ function updateHUD(){
   if(G.buffs.rageT>0) bf.push('🔥분노'+Math.ceil(G.buffs.rageT));
   if(G.buffs.luckT>0) bf.push('💰행운'+Math.ceil(G.buffs.luckT));
   if(G.buffs.guardT>0) bf.push('🛡수호'+Math.ceil(G.buffs.guardT));
+  const coil=Math.max(0,...G.turrets.filter(isLauncher).map(t=>t.coilT));
+  if(coil>0) bf.push('⚡코일'+Math.ceil(coil));
   document.getElementById('buffs').textContent=bf.join('  ');
   const cost=upgradeCost();
   document.getElementById('up').textContent='강화 💰'+cost;
@@ -1151,14 +1266,26 @@ function updateShop(){
   mb.textContent = pair>=0 ? ('⚡ 합체\nLv'+(pair+1)+'×2 → '+CFG.turretTiers[pair+1].n) : '⚡ 합체\n같은 레벨 2개 필요';
   mb.style.whiteSpace='pre-line'; mb.disabled=(pair<0);
   const sb=document.getElementById('sellTurret'), st=G.selTurret||G.turrets[G.turrets.length-1];
-  sb.textContent = st ? ('♻ 포탑 판매\n'+CFG.turretTiers[st.tier].n+' 💰+'+Math.round(CFG.turretCost0*Math.pow(CFG.turretTierCostMul,st.tier)*CFG.turretSellFrac))
-                      : '♻ 포탑 판매\n보유 포탑 없음';
+  sb.textContent = st ? ('♻ 판매\n'+tdef(st).n+' 💰+'+Math.round((isLauncher(st)?CFG.launcherCost
+                            :CFG.turretCost0*Math.pow(CFG.turretTierCostMul,st.tier))*CFG.turretSellFrac).toLocaleString())
+                      : '♻ 판매\n보유 구조물 없음';
   sb.style.whiteSpace='pre-line'; sb.disabled=!st;
   const counts=new Array(CFG.turretTiers.length).fill(0);
-  for(const t of G.turrets) counts[t.tier]++;
-  document.getElementById('turList').innerHTML = G.turrets.length
-    ? counts.map((c,i)=>c?'<span class="tchip">Lv'+(i+1)+' '+CFG.turretTiers[i].n+' <b>×'+c+'</b></span>':'').join('')
-    : '<span class="tchip">보유 포탑 없음</span>';
+  for(const t of G.turrets) if(!isLauncher(t)) counts[t.tier]++;
+  const lch=G.turrets.filter(isLauncher);
+  const chips=counts.map((c,i)=>c?'<span class="tchip">Lv'+(i+1)+' '+CFG.turretTiers[i].n+' <b>×'+c+'</b></span>':'').join('')
+    + lch.map(t=>'<span class="tchip">⚡ 발사기 <b>'+(t.coilT>0?Math.ceil(t.coilT)+'초':'코일 없음')+'</b></span>').join('');
+  document.getElementById('turList').innerHTML = chips || '<span class="tchip">보유 구조물 없음</span>';
+
+  // 에너지 병기
+  const lc=launcherCost(), cc=coilCost(), bl=document.getElementById('buyLauncher'), bc=document.getElementById('buyCoil');
+  bl.textContent='⚡ 에너지 발사기\n설치 · 💰'+lc.toLocaleString();
+  bl.style.whiteSpace='pre-line'; bl.disabled = full || G.gold<lc;
+  bc.textContent='🔋 에너지 코일\n'+CFG.coilDur+'초 장착 · 💰'+cc.toLocaleString();
+  bc.style.whiteSpace='pre-line'; bc.disabled = !lch.length || G.gold<cc;
+  document.getElementById('nrgInfo').textContent = !lch.length
+    ? '발사기를 먼저 설치해야 코일을 넣을 수 있습니다.'
+    : '발사기 '+lch.length+'대 · 코일은 화면에서 고른 발사기에 들어갑니다(안 고르면 비어있는 쪽). 이미 켜져 있으면 시간이 더해집니다.';
   const wc=CFG.weapons[G.weaponTier], wn=CFG.weapons[G.weaponTier+1];
   document.getElementById('weaponCur').textContent='· 현재 '+wc.n+' (공격 +'+wc.dmg+')';
   const bw=document.getElementById('buyWeapon');
@@ -1279,13 +1406,11 @@ cv.addEventListener('pointerdown', ev=>{
   grabX=hit.x-w.x; grabY=hit.y-w.y;                          // 잡은 지점과의 상대 위치 유지
   dragFrom={x:hit.x, y:hit.y};                               // 못 놓으면 되돌릴 원래 자리
   if(!G.selTurret || G.selTurret===hit){ G.selTurret=(G.selTurret===hit)?null:hit; return; }
-  if(G.selTurret.tier===hit.tier){
-    if(!mergeTurrets(G.selTurret,hit)){                      // 최고 등급은 합체 불가
-      floatText(hit.x,hit.y,'최고 등급은 합체할 수 없습니다','#ff8a97'); G.selTurret=null; }
-    dragT=null;
-  } else {
-    floatText(hit.x,hit.y,'같은 레벨끼리만 합체됩니다','#ff8a97'); G.selTurret=hit;
-  }
+  if(canMerge(G.selTurret,hit)){ mergeTurrets(G.selTurret,hit); dragT=null; }
+  else if(isLauncher(hit)||isLauncher(G.selTurret)){ G.selTurret=hit; }   // 에너지 병기는 합체 안 됨
+  else if(G.selTurret.tier===hit.tier){
+    floatText(hit.x,hit.y,'최고 등급은 합체할 수 없습니다','#ff8a97'); G.selTurret=null;
+  } else { floatText(hit.x,hit.y,'같은 레벨끼리만 합체됩니다','#ff8a97'); G.selTurret=hit; }
 });
 cv.addEventListener('pointermove', ev=>{
   if(!dragT) return;
@@ -1296,20 +1421,21 @@ cv.addEventListener('pointermove', ev=>{
   dragT.x=w.x+grabX; dragT.y=w.y+grabY;                      // 포탑이 손가락을 따라옴
   G.selTurret=dragT;
   const over=turretAt(mx,my,dragT);
-  const merge=(over && over.tier===dragT.tier && over.tier<CFG.turretTiers.length-1) ? over : null;
+  const merge=canMerge(dragT,over) ? over : null;
   G.dropInfo={ merge, land: merge?null:placeSpot(dragT.x,dragT.y,dragT) };   // 실제로 놓일 위치
 });
 function endDrag(ev){
   if(dragT && dragOn){
     const {mx,my}=ptOf(ev), over=turretAt(mx,my,dragT);
-    if(over && over.tier===dragT.tier && over.tier<CFG.turretTiers.length-1){
+    if(canMerge(dragT,over)){
       dragT.x=dragFrom.x; dragT.y=dragFrom.y;                // 합체는 대상 자리에서
       mergeTurrets(dragT,over);
     } else {
       const s=placeSpot(dragT.x,dragT.y,dragT);              // 어디에 놓든 그 자리(또는 바로 옆)에 배치
       if(s){ dragT.x=s.x; dragT.y=s.y;
         burst(s.x,s.y,'#8ad3ff',6); floatText(s.x,s.y,'↔ 포탑 이동','#8ad3ff'); G.selTurret=null;
-        if(over) floatText(over.x,over.y,'같은 레벨끼리만 합체됩니다','#c8b4ff');
+        if(over && !isLauncher(over) && !isLauncher(dragT))
+          floatText(over.x,over.y,'같은 레벨끼리만 합체됩니다','#c8b4ff');
       } else { dragT.x=dragFrom.x; dragT.y=dragFrom.y; }     // (맵이 꽉 찬 극단적 경우만)
     }
   }
@@ -1334,6 +1460,8 @@ document.getElementById('shopClose').onclick=closeShop;
   });
 })();
 document.getElementById('mergeTurret').onclick=()=>{ autoMerge(); updateShop(); };
+document.getElementById('buyLauncher').onclick=buyLauncher;
+document.getElementById('buyCoil').onclick=buyCoil;
 document.getElementById('sellTurret').onclick=sellTurret;
 document.getElementById('buyWeapon').onclick=buyWeapon;
 document.getElementById('buyArmor').onclick=buyArmor;
