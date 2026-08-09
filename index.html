@@ -31,6 +31,25 @@
   #saveBtn{background:#c9a227; color:#1a1200}
   button:disabled{opacity:.4; cursor:default}
   canvas{flex:1; display:block; width:100%; touch-action:none}
+  #bossLog{position:absolute; left:50%; top:72px; transform:translateX(-50%); z-index:8; display:none;
+    background:linear-gradient(180deg,rgba(46,12,30,.96),rgba(20,10,26,.96));
+    border:2px solid #ff3b6b; border-radius:14px; padding:11px 16px 9px;
+    width:max-content; max-width:min(430px,92vw); cursor:pointer;
+    box-shadow:0 10px 30px rgba(0,0,0,.55); animation:bossPop .25s ease-out}
+  @keyframes bossPop{from{opacity:0; transform:translateX(-50%) translateY(-10px) scale(.94)}
+                     to{opacity:1; transform:translateX(-50%) translateY(0) scale(1)}}
+  #bossLog h4{margin:0 0 7px; font-size:15px; color:#ff8a97; text-align:center}
+  #bossLog h4 .lv{color:var(--muted); font-size:12px; font-weight:600}
+  #bossLog .row{display:flex; gap:7px; align-items:baseline; font-size:14px; padding:3px 0;
+    border-top:1px solid rgba(255,255,255,.08)}
+  #bossLog .row:first-of-type{border-top:0}
+  #bossLog .ic{flex:0 0 auto}
+  #bossLog .g{color:var(--gold); font-weight:800}
+  #bossLog .it{color:#8ad3ff; font-weight:700; flex:0 0 auto}
+  #bossLog .dt{color:var(--text); font-size:12.5px; opacity:.9}
+  #bossLog .tm{margin-top:7px; font-size:10.5px; color:var(--muted); text-align:center}
+  @media (max-width:640px){ #bossLog{top:64px; padding:9px 12px 7px}
+    #bossLog h4{font-size:13.5px} #bossLog .row{font-size:12.5px} #bossLog .dt{font-size:11px} }
   #hud,#over,#shop{-webkit-user-select:none; user-select:none; -webkit-touch-callout:none}
   @media (max-width:640px){
     #hud{gap:5px; padding:6px 8px}
@@ -114,6 +133,7 @@
     <button id="stop" disabled>끝내기</button>
   </div>
   <canvas id="c"></canvas>
+  <div id="bossLog"></div>
 </div>
 <div id="over">
   <div class="card">
@@ -319,6 +339,7 @@ const CFG = {
   coilCost:90000, coilCostMul:1.25,             // 코일(소모품) : 쓸수록 비싸짐
   coilDur:60,                                   // 기본 지속(레벨이 오르면 launcherTiers.coilDur 사용)
   // ---- 보스 (스테이지 5마다) ----
+  bossLogDur:9, bossFloatLife:4,                 // 보스 보상 창 표시(초) / 떠오르는 글자 지속(초)
   bossEvery:5, bossHpMult:12, bossDmgMult:2.6, bossSpeedMult:0.72, bossRMult:2.4, bossReward:60, bossGoldBase:90,
   // ---- 상점 ----
   defK:60, defMaxCut:0.95, poisonFrac:0.06,   // 방어 경감 상한 95%                         // 방어력 경감 계수 / 독 초당 피해(최대체력 비율)
@@ -891,6 +912,7 @@ function reset(){
   G.launchersBought=0; G.coilsUsed=0; G.potBought={}; G.dollBought={};
   G.allies=[]; for(let i=0;i<CFG.allyStart;i++) G.allies.push(newAlly());
   G.lastCp=null; G.cpList=[];
+  hideBossLog();
   layoutAllies();
 }
 
@@ -1226,7 +1248,7 @@ function hitEnemy(e,dmg,p,direct){
 function damageNum(x,y,v,c){
   if(G.nums.length>60) return;                 // 적이 많을 때 숫자 폭주 방지
   G.nums.push({x,y,val:Math.round(v),color:c,t:0,rise:0}); }
-function floatText(x,y,txt,c){ G.nums.push({x,y,txt,color:c,t:0,rise:0,big:true}); }
+function floatText(x,y,txt,c,life){ G.nums.push({x,y,txt,color:c,t:0,rise:0,big:true,life:life||0.9}); }
 function burst(x,y,c,n){
   if(REDUCE) n=Math.ceil(n*0.3);
   if(G.enemies.length>30) n=Math.ceil(n*0.35);           // 적이 많으면 파티클 줄임
@@ -1379,7 +1401,8 @@ function update(dt){
   G.fx=G.fx.filter(f=>f.t<f.life);
   if(G.beams.length){ for(const bm of G.beams) bm.t+=dt; G.beams=G.beams.filter(bm=>bm.t<bm.life); }
   for(const n of G.nums){ n.t+=dt; n.rise+=(n.big?34:26)*dt; }
-  G.nums=G.nums.filter(n=>n.t<(n.big?0.9:0.7));
+  G.nums=G.nums.filter(n=>n.t<(n.life||(n.big?0.9:0.7)));
+  if(bossLogT>0 && !G.shopOpen){ bossLogT-=dt; if(bossLogT<=0) hideBossLog(); }   // 상점 보는 동안은 유지
 
   if(active && G.allies.every(a=>a.dead)) endGame();
   updateHUD();
@@ -1469,7 +1492,8 @@ function draw(){
   // 데미지 숫자 (화면공간)
   ctx.textAlign='center';
   for(const n of G.nums){
-    ctx.globalAlpha=1-n.t/(n.big?0.9:0.7);
+    const nl=n.life||(n.big?0.9:0.7);
+    ctx.globalAlpha=Math.min(1, (1-n.t/nl)*2.5);   // 오래 뜨는 글자는 끝에서만 흐려짐
     ctx.fillStyle=n.color; ctx.font='bold '+(n.big?17:14)+'px Segoe UI';
     ctx.lineWidth=3; ctx.strokeStyle='rgba(0,0,0,.55)';
     const sx=isoX(n.x,n.y), sy=isoY(n.x,n.y,58)-n.rise;
@@ -1827,20 +1851,32 @@ function buyDoll(key){
 }
 
 // ---- 보스 처치 보상 : 강할수록(스폰 스테이지↑) 좋은 랜덤 아이템 ----
+// apply() 는 "실제로 무엇을 얼마나 받았는지"를 문장으로 돌려준다 (보상 창에 그대로 표시)
 const BOSS_REWARDS = [
-  {q:1, label:'골드 소량', apply:()=>{ G.gold+=20+G.level*3; }},
-  {q:1, label:'감속',     apply:()=>{ for(const e of G.enemies) e.slowT=Math.max(e.slowT,5); }},
-  {q:2, label:'독',       apply:()=>{ for(const e of G.enemies) e.poisonT=Math.max(e.poisonT,6); }},
-  {q:2, label:'화상',     apply:()=>{ for(const e of G.enemies) e.burnT=Math.max(e.burnT,CFG.burnDur); }},
-  {q:3, label:'전원 치유', apply:()=>{ for(const a of G.allies){ if(!a.dead) a.hp=a.maxHp; } }},
-  {q:3, label:'행운 버프', apply:()=>{ G.buffs.luckT=CFG.luckDur; }},
-  {q:3, label:'전체 빙결', apply:()=>{ for(const e of G.enemies) e.freezeT=Math.max(e.freezeT,CFG.freezeDollDur); }},
-  {q:4, label:'분노 버프', apply:()=>{ G.buffs.rageT=CFG.rageDur; }},
-  {q:4, label:'수호 버프', apply:()=>{ G.buffs.guardT=CFG.guardDur; }},
-  {q:4, label:'무기 강화', apply:()=>{ if(G.weaponTier<CFG.weapons.length-1){ G.weaponTier++; applyAllyStats(); } else G.gold+=120; }},
-  {q:4, label:'방어구 강화',apply:()=>{ if(G.armorTier<CFG.armors.length-1){ G.armorTier++; applyAllyStats(); } else G.gold+=120; }},
-  {q:5, label:'부활+완전회복',apply:()=>{ for(const a of G.allies){ a.dead=false; a.hp=a.maxHp; } layoutAllies(); }},
-  {q:5, label:'대박 골드',  apply:()=>{ G.gold+=150+G.level*10; }},
+  {q:1, label:'골드 소량', apply:()=>{ const g=20+G.level*3; G.gold+=g; return '골드 +'+g.toLocaleString(); }},
+  {q:1, label:'감속',     apply:()=>{ let n=0; for(const e of G.enemies){ e.slowT=Math.max(e.slowT,5); n++; }
+                                      return '적 '+n+'마리 감속 5초'; }},
+  {q:2, label:'독',       apply:()=>{ let n=0; for(const e of G.enemies){ e.poisonT=Math.max(e.poisonT,6); n++; }
+                                      return '적 '+n+'마리 독 6초'; }},
+  {q:2, label:'화상',     apply:()=>{ let n=0; for(const e of G.enemies){ e.burnT=Math.max(e.burnT,CFG.burnDur); n++; }
+                                      return '적 '+n+'마리 화상 '+CFG.burnDur+'초'; }},
+  {q:3, label:'전원 치유', apply:()=>{ let n=0; for(const a of G.allies){ if(!a.dead){ a.hp=a.maxHp; n++; } }
+                                      return '아군 '+n+'명 체력 완전 회복'; }},
+  {q:3, label:'행운 버프', apply:()=>{ G.buffs.luckT=CFG.luckDur; return '골드 '+CFG.luckMult+'배 '+CFG.luckDur+'초'; }},
+  {q:3, label:'전체 빙결', apply:()=>{ let n=0; for(const e of G.enemies){ e.freezeT=Math.max(e.freezeT,CFG.freezeDollDur); n++; }
+                                      return '적 '+n+'마리 빙결 '+CFG.freezeDollDur+'초'; }},
+  {q:4, label:'분노 버프', apply:()=>{ G.buffs.rageT=CFG.rageDur; return '아군 화력 상승 '+CFG.rageDur+'초'; }},
+  {q:4, label:'수호 버프', apply:()=>{ G.buffs.guardT=CFG.guardDur; return '아군 방어 +'+CFG.guardDef+' '+CFG.guardDur+'초'; }},
+  {q:4, label:'무기 강화', apply:()=>{ if(G.weaponTier<CFG.weapons.length-1){ G.weaponTier++; applyAllyStats();
+                                        return '무기 → '+CFG.weapons[G.weaponTier].n+' (공격 +'+weaponDmg()+')'; }
+                                      G.gold+=120; return '무기 최고 단계 · 골드 +120'; }},
+  {q:4, label:'방어구 강화',apply:()=>{ if(G.armorTier<CFG.armors.length-1){ G.armorTier++; applyAllyStats();
+                                        return '방어구 → '+CFG.armors[G.armorTier].n+' (방어 '+armorDef()+')'; }
+                                      G.gold+=120; return '방어구 최고 단계 · 골드 +120'; }},
+  {q:5, label:'부활+완전회복',apply:()=>{ const d=G.allies.filter(a=>a.dead).length;
+                                      for(const a of G.allies){ a.dead=false; a.hp=a.maxHp; } layoutAllies();
+                                      return '아군 '+d+'명 부활 + 전원 완전 회복'; }},
+  {q:5, label:'대박 골드',  apply:()=>{ const g=150+G.level*10; G.gold+=g; return '골드 +'+g.toLocaleString(); }},
 ];
 function rollReward(tier){                     // tier 근처의 q를 선호 (약한 보스=낮은 q, 강한 보스=높은 q)
   let total=0; const w=BOSS_REWARDS.map(r=>{ const v=1/(1+Math.abs(r.q-tier)); total+=v; return v; });
@@ -1852,10 +1888,33 @@ function dropBossReward(e){
   const T=Math.max(1, Math.round((e.bossLevel||G.level)/CFG.bossEvery));   // 보스 강함 등급
   const cT=Math.min(5,T), px=e.x, py=e.y, luck=(G.buffs.luckT>0?CFG.luckMult:1);
   const gold=Math.round(CFG.bossGoldBase*T*(0.8+Math.random()*0.6))*luck;  // 대량 골드(강할수록 많음)
-  G.gold+=gold; floatText(px,py-18,'💰 +'+gold,'#ffd166');
+  G.gold+=gold;
+  floatText(px,py-18,'💰 +'+gold.toLocaleString(),'#ffd166',CFG.bossFloatLife);
   const rolls=Math.min(3, Math.ceil(cT/2));                                // 강할수록 아이템 개수↑
-  for(let i=0;i<rolls;i++){ const r=rollReward(cT); r.apply(); floatText(px,py-42-i*22,'🎁 '+r.label,'#8ad3ff'); }
+  const items=[];
+  for(let i=0;i<rolls;i++){
+    const r=rollReward(cT);
+    const detail=r.apply() || r.label;                                     // 실제 받은 내용
+    items.push({label:r.label, detail});
+    floatText(px,py-54-i*38,'🎁 '+r.label,'#8ad3ff',CFG.bossFloatLife);   // 겹치지 않게 간격
+  }
+  showBossLog(e.bossLevel||G.level, gold, items);                          // 화면에 오래 남는 보상 창
 }
+
+// ---- 보스 보상 창 : 무엇을 받았는지 충분히 오래 보여준다 ----
+let bossLogT=0;
+function showBossLog(level, gold, items){
+  const el=document.getElementById('bossLog');
+  if(!el) return;
+  el.innerHTML='<h4>👑 보스 처치!  <span class="lv">스테이지 '+level+'</span></h4>'
+    +'<div class="row"><span class="ic">💰</span><span class="g">골드 +'+gold.toLocaleString()+'</span></div>'
+    +items.map(it=>'<div class="row"><span class="ic">🎁</span><span class="it">'+it.label+'</span>'
+                  +'<span class="dt">'+it.detail+'</span></div>').join('')
+    +'<div class="tm">누르면 닫기 · '+CFG.bossLogDur+'초 뒤 자동으로 사라집니다</div>';
+  el.style.display='block';
+  bossLogT=CFG.bossLogDur;
+}
+function hideBossLog(){ bossLogT=0; const el=document.getElementById('bossLog'); if(el) el.style.display='none'; }
 
 // ---- 포탑 조작 : 끌어서 아무 곳으로나 이동 / 같은 레벨 위에 놓으면 합체 ----
 function ptOf(ev){ const r=cv.getBoundingClientRect(); return {mx:ev.clientX-r.left, my:ev.clientY-r.top}; }
@@ -1974,6 +2033,7 @@ function updateSaves(){
 }
 function openSaves(){ updateSaves(); document.getElementById('saves').style.display='grid'; }
 function closeSaves(){ document.getElementById('saves').style.display='none'; }
+document.getElementById('bossLog').onclick=hideBossLog;
 document.getElementById('saveBtn').onclick=openSaves;
 document.getElementById('savesClose').onclick=closeSaves;
 document.getElementById('doSave').onclick=()=>{
