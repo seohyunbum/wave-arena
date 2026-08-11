@@ -1177,43 +1177,6 @@ function nearestPathPoint(x,y){
   return {x:bx, y:by};
 }
 
-// ---- 레이저 ----
-function laserCost(tier){
-  return Math.round(CFG.laserTiers[tier||0].cost*Math.pow(CFG.laserCostMul, G.lasersBought));
-}
-function buyLaser(tier){
-  tier=Math.max(0,Math.min(CFG.laserTiers.length-1, tier|0));
-  if(G.phase==='over') return;
-  if(G.turrets.length>=CFG.turretMax){
-    floatText(baseNode().x,baseNode().y,'구조물은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
-  const cost=laserCost(tier); if(G.gold<cost) return;
-  const L=CFG.laserTiers[tier];
-  // 길 위(빔이 길을 가로지르도록)에 우선 배치
-  let sp=null;
-  for(const q of TSPOTS){
-    const c=nearestPathPoint(q.x,q.y);
-    if(canPlace(c.x,c.y,null,L.base)){ sp={x:c.x,y:c.y}; break; }
-  }
-  if(!sp) sp=spawnSpot(L.base);
-  if(!sp){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
-  G.gold-=cost; G.lasersBought++;
-  G.turrets.push({kind:'laser', tier, x:sp.x, y:sp.y, ang:pathAngleAt(sp.x,sp.y), hitT:0, dealt:0});
-  floatText(sp.x,sp.y,'📡 '+L.n+' 설치!',L.top);
-  burst(sp.x,sp.y,L.top,16);
-  updateShop();
-}
-// 길 위에서 가장 가까운 점 (레이저를 길 한가운데 놓기 위해)
-function nearestPathPoint(x,y){
-  let best=1e9, bx=x, by=y;
-  for(let i=0;i<WP.length-1;i++){
-    const a=WP[i], b=WP[i+1], dx=b.x-a.x, dy=b.y-a.y, L2=dx*dx+dy*dy||1;
-    let u=((x-a.x)*dx+(y-a.y)*dy)/L2; u=Math.max(0,Math.min(1,u));
-    const px=a.x+dx*u, py=a.y+dy*u, d=Math.hypot(x-px,y-py);
-    if(d<best){ best=d; bx=px; by=py; }
-  }
-  return {x:bx, y:by};
-}
-
 // ---- 에너지 병기 ----
 // 레벨이 더해지는 합체라 Lv(n) = Lv1 n대 분량. 포탑과 같은 원칙으로 가격을 맞춘다.
 function launcherUnits(tier){ return (tier||0)+1; }
