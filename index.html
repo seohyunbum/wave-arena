@@ -975,7 +975,9 @@ function restore(s){
     G.pathIndex=s.pathIndex; setPath(G.pathIndex);
     TSPOTS=buildTurretSlots(); buildDecor(G.pathIndex); fitCamera(); buildGround();
   }
+  const keepCp=G.lastCp;          // reset() 이 세이브포인트를 지우므로 잠시 맡아 둔다
   reset();
+  G.lastCp=keepCp;                // 같은 세이브포인트에서 몇 번이든 다시 부활할 수 있어야 한다
   G.time=s.time||0; G.kills=s.kills||0; G.gold=s.gold||0;
   G.upTotal=s.upTotal||0; G.upToward=s.upToward||0;
   G.weaponTier=s.weaponTier||0; G.armorTier=s.armorTier||0;
