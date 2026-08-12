@@ -121,6 +121,8 @@
     <div class="stat"><div class="k">골드</div><div class="v gold" id="gold">0</div></div>
     <div class="stat"><div class="k">아군</div><div class="v" id="allies">3</div></div>
     <div class="stat"><div class="k">포탑</div><div class="v" id="turrets">0</div></div>
+    <div class="stat"><div class="k">레이저</div><div class="v" id="lasersN">0</div></div>
+    <div class="stat"><div class="k">발사기</div><div class="v" id="launchersN">0</div></div>
     <div class="stat"><div class="k">강화</div><div class="v" id="uplv">Lv 0</div></div>
     <div class="spacer"></div>
     <span class="tag" id="next">다음 아군 0/5</span>
@@ -284,8 +286,9 @@ const CFG = {
   // ---- 포탑 ----
   // 상위 레벨 직접 구매가 = 그 레벨을 합체로 만드는 데 드는 비용 x launcherBuyPremium
   // (구매 횟수도 Lv1 환산 개수만큼 올라가므로, 사든 합치든 이후 가격 상승까지 동일하다)
-  // turretMax = 보유 가능한 포탑 수 (자리는 고정되지 않고 어디든 자유 배치)
-  turretMax:14, turretGap:5, turretEdge:14,    // 받침끼리 띄울 여유 간격 / 맵 가장자리 여백
+  // 종류별로 따로 세는 보유 상한 (자리는 고정되지 않고 어디든 자유 배치)
+  turretMax:14, laserMax:10, launcherMax:6,
+  turretGap:5, turretEdge:14,                  // 받침끼리 띄울 여유 간격 / 맵 가장자리 여백
   // 편의 프리미엄(x1.15)을 기본가에 녹여 두었다(110 -> 127).
   // 덕분에 모든 단계가 "기본가 x 2^단계" 하나의 식으로 완전히 동일하게 계산되고,
   // 같은 단계 2개를 합치든 다음 단계를 사든 값이 정확히 똑같다.
@@ -1037,6 +1040,12 @@ function reviveAtCheckpoint(){
 // ---- 포탑 ----
 // 구조물 정의 : 일반 포탑은 등급표, 에너지 발사기는 전용 정의를 쓴다
 function kindOf(t){ return (t&&t.kind) || 'turret'; }
+function countKind(kind){ let n=0; for(const t of G.turrets) if(kindOf(t)===kind) n++; return n; }
+function maxOfKind(kind){
+  return kind==='laser' ? CFG.laserMax : kind==='launcher' ? CFG.launcherMax : CFG.turretMax;
+}
+function kindName(kind){ return kind==='laser' ? '레이저' : kind==='launcher' ? '에너지 발사기' : '포탑'; }
+function isKindFull(kind){ return countKind(kind)>=maxOfKind(kind); }
 function tdef(t){
   const k=kindOf(t);
   return k==='launcher' ? CFG.launcherTiers[t.tier]
@@ -1128,7 +1137,7 @@ function spawnSpot(size){
 function buyTurret(tier){
   tier=Math.max(0,Math.min(CFG.turretTiers.length-1, tier|0));
   if(G.phase==='over') return;
-  if(G.turrets.length>=CFG.turretMax){
+  if(isKindFull('turret')){
     floatText(baseNode().x,baseNode().y,'포탑은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
   const cost=turretCost(tier);
   if(G.gold<cost) return;
@@ -1147,8 +1156,8 @@ function laserCost(tier){
 function buyLaser(tier){
   tier=Math.max(0,Math.min(CFG.laserTiers.length-1, tier|0));
   if(G.phase==='over') return;
-  if(G.turrets.length>=CFG.turretMax){
-    floatText(baseNode().x,baseNode().y,'구조물은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
+  if(isKindFull('laser')){
+    floatText(baseNode().x,baseNode().y,'레이저는 최대 '+CFG.laserMax+'개까지','#ff8a97'); return; }
   const cost=laserCost(tier); if(G.gold<cost) return;
   const L=CFG.laserTiers[tier];
   // 길 위(빔이 길을 가로지르도록)에 우선 배치
@@ -1197,8 +1206,8 @@ function coilCost(){ return Math.round(CFG.coilCost*Math.pow(CFG.coilCostMul,G.c
 function buyLauncher(tier){
   tier=Math.max(0,Math.min(CFG.launcherTiers.length-1, tier|0));
   if(G.phase==='over') return;
-  if(G.turrets.length>=CFG.turretMax){
-    floatText(baseNode().x,baseNode().y,'구조물은 최대 '+CFG.turretMax+'개까지','#ff8a97'); return; }
+  if(isKindFull('launcher')){
+    floatText(baseNode().x,baseNode().y,'에너지 발사기는 최대 '+CFG.launcherMax+'대까지','#ff8a97'); return; }
   const cost=launcherCost(tier); if(G.gold<cost) return;
   const s=spawnSpot(CFG.launcherTiers[tier].base);
   if(!s){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
@@ -1623,7 +1632,8 @@ function draw(){
   ctx.globalAlpha=1;
 
   if(G.phase==='idle'){ banner('“시작”을 누르면 적이 길을 따라 몰려옵니다','rgba(232,236,246,.95)');
-    subline('상점에서 포탑 구매 · 끌어서 원하는 곳에 배치 · 같은 레벨끼리 겹치면 합체!','#c8b4ff',52);
+    subline(W<560 ? '상점에서 구매 · 끌어서 배치 · 같은 레벨 겹치면 합체'
+                  : '상점에서 포탑 구매 · 끌어서 원하는 곳에 배치 · 같은 레벨끼리 겹치면 합체!','#c8b4ff',52);
     if(RECORDS.bestTime>0){ ctx.textAlign='center'; ctx.font='bold 14px Segoe UI'; ctx.lineWidth=4; ctx.strokeStyle='rgba(0,0,0,.6)';
       const s='🏆 최고 기록  '+RECORDS.bestTime.toFixed(0)+'초 · '+RECORDS.bestKills+'킬 · Lv'+RECORDS.bestLevel;
       ctx.strokeText(s,W/2,74); ctx.fillStyle='#ffd166'; ctx.fillText(s,W/2,74); } }
@@ -1801,7 +1811,13 @@ function updateHUD(){
   document.getElementById('kills').textContent=G.kills;
   document.getElementById('gold').textContent=Math.floor(G.gold);
   document.getElementById('allies').textContent=G.allies.filter(a=>!a.dead).length;
-  document.getElementById('turrets').textContent=G.turrets.length+'/'+CFG.turretMax;
+  document.getElementById('turrets').textContent=countKind('turret')+'/'+CFG.turretMax;
+  const optStat=(id,n,max)=>{ const el=document.getElementById(id);
+    el.textContent=n+'/'+max;
+    el.parentElement.style.display = n>0 ? '' : 'none';   // 없으면 숨겨 HUD를 좁게 유지
+  };
+  optStat('lasersN', countKind('laser'), CFG.laserMax);
+  optStat('launchersN', countKind('launcher'), CFG.launcherMax);
   document.getElementById('uplv').textContent='Lv '+G.upTotal;
   document.getElementById('next').textContent='다음 아군 '+G.upToward+'/'+CFG.perMilestone;
   const bf=[];
@@ -1877,7 +1893,7 @@ function closeShop(){ G.shopOpen=false; document.getElementById('shop').style.di
 function updateShop(){
   document.getElementById('shopGold').textContent=Math.floor(G.gold);
   // 포탑 : 등급별 직접 구매 버튼
-  const full=G.turrets.length>=CFG.turretMax;
+  const full=isKindFull('turret');            // 포탑 칸 전용 (레이저·발사기는 각자 따로)
   for(let i=0;i<CFG.turretTiers.length;i++){
     const T=CFG.turretTiers[i], b=document.getElementById('buyTur_'+i), c=turretCost(i);
     b.textContent='Lv'+(i+1)+' '+T.n+'\n공격 '+T.dmg+' × 초당 '+(1/T.fire).toFixed(1)+'발'
@@ -1887,7 +1903,7 @@ function updateShop(){
   }
   document.getElementById('turSlotInfo').textContent =
     full ? '⚠ 포탑은 최대 '+CFG.turretMax+'개까지 (합체하면 자리가 생깁니다)'
-         : '보유 '+G.turrets.length+'/'+CFG.turretMax+'개 · 산 포탑은 화면에서 끌어 원하는 곳에 배치';
+         : '포탑 '+countKind('turret')+'/'+CFG.turretMax+'개 · 산 포탑은 화면에서 끌어 원하는 곳에 배치';
   const maxT=CFG.turretTiers.length-1;
   let pair=-1;
   for(let i=maxT-1;i>=0;i--){ if(G.turrets.filter(t=>!isLauncher(t)&&t.tier===i).length>=2){ pair=i; break; } }
@@ -1924,12 +1940,13 @@ function updateShop(){
   for(let i=0;i<CFG.laserTiers.length;i++){
     const L=CFG.laserTiers[i], b=document.getElementById('buyLsr_'+i), c=laserCost(i);
     b.textContent='Lv'+(i+1)+' 레이저\n초당 '+L.dps.toLocaleString()+' 피해\n💰'+c.toLocaleString();
-    b.disabled = full || G.gold<c;
+    b.disabled = isKindFull('laser') || G.gold<c;
     b.style.borderLeft='4px solid '+L.top;
   }
-  const nL=G.turrets.filter(isLaser).length;
+  const nL=countKind('laser');
   document.getElementById('laserInfo').textContent =
-    '보유 '+nL+'대 · 사면 길 위에 자동으로 놓이고 빔이 길을 가로지릅니다. '
+    (isKindFull('laser') ? '⚠ 레이저는 최대 '+CFG.laserMax+'개까지 · ' : '')
+    +'레이저 '+nL+'/'+CFG.laserMax+'대 (포탑 개수와 별도) · 사면 길 위에 자동으로 놓이고 빔이 길을 가로지릅니다. '
     +'좌클릭으로 고른 뒤 원하는 곳을 클릭하면 옮겨지고, 빔 방향은 그 자리의 길에 맞춰 자동으로 돌아갑니다.';
 
   // 에너지 병기
@@ -1937,7 +1954,7 @@ function updateShop(){
   for(let i=0;i<CFG.launcherTiers.length;i++){
     const L=CFG.launcherTiers[i], b=document.getElementById('buyNrg_'+i), c=launcherCost(i);
     b.textContent='Lv'+(i+1)+' 발사기\n한 번에 '+L.shots+'발 · 코일 '+L.coilDur+'초\n💰'+c.toLocaleString();
-    b.disabled = full || G.gold<c;
+    b.disabled = isKindFull('launcher') || G.gold<c;
     b.style.borderLeft='4px solid '+L.top;
   }
   const empty=lch.filter(t=>t.coilT<=0).length;
@@ -1945,7 +1962,7 @@ function updateShop(){
   bc.style.whiteSpace='pre-line'; bc.disabled = !lch.length || G.gold<cc;
   document.getElementById('nrgInfo').textContent = !lch.length
     ? '발사기를 먼저 설치해야 코일을 넣을 수 있습니다. 발사기끼리 겹치면 레벨이 더해집니다.'
-    : '발사기 '+lch.length+'대'+(empty?' (빈 발사기 '+empty+'대)':'')
+    : '발사기 '+lch.length+'/'+CFG.launcherMax+'대 (포탑·레이저와 별도)'+(empty?' · 빈 발사기 '+empty+'대':'')
       +' · 코일이 다 닳아도 새 코일을 넣으면 다시 가동됩니다(레벨이 높을수록 오래 감). '
       +'화면에서 고른 발사기에 들어가고(안 고르면 비어있는 쪽), 켜져 있으면 시간이 더해집니다.';
   const wc=CFG.weapons[G.weaponTier], wn=CFG.weapons[G.weaponTier+1];
