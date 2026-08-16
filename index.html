@@ -96,6 +96,7 @@
   .buy.nrg{background:#123a5c; border:1px solid #2f7fb0}
   .buy.coil{background:#0f5550; border:1px solid #2fb0a4}
   .buy.lsr{background:#4a1030; border:1px solid #b0367a}
+  .buy.rap{background:#2e3a22; border:1px solid #7f9a4e}
   .buy.merge{background:#6b5a1f}
   .tlist{display:flex; flex-wrap:wrap; gap:4px; margin-top:8px}
   .tchip{font-size:11px; background:#0e1428; border:1px solid #2b3552; border-radius:8px; padding:3px 7px; color:var(--muted)}
@@ -126,6 +127,7 @@
     <div class="stat"><div class="k">골드</div><div class="v gold" id="gold">0</div></div>
     <div class="stat"><div class="k">아군</div><div class="v" id="allies">3</div></div>
     <div class="stat"><div class="k">포탑</div><div class="v" id="turrets">0</div></div>
+    <div class="stat"><div class="k">연사</div><div class="v" id="rapidsN">0</div></div>
     <div class="stat"><div class="k">레이저</div><div class="v" id="lasersN">0</div></div>
     <div class="stat"><div class="k">발사기</div><div class="v" id="launchersN">0</div></div>
     <div class="stat"><div class="k">강화</div><div class="v" id="uplv">Lv 0</div></div>
@@ -213,6 +215,12 @@
       <div class="thint">포탑을 끌어서 <b style="color:#8ad3ff">아무 곳에나</b> 놓을 수 있습니다(길 위도 가능).
         같은 레벨 포탑 위에 놓으면 <b style="color:#ffd166">합체</b>.
         탭으로 고른 뒤 원하는 곳을 탭해도 옮겨집니다.</div>
+    </div>
+    <div class="ssec">
+      <h3>연사 포탑 <small>기관총 계열 · 일반 포탑과 똑같이 동작하지만 공격력이 낮고 연사가 아주 빠름 ·
+        <b style="color:#ffd166">레벨이 올라도 공격력은 12 그대로, 연사만 빨라짐</b> · 같은 레벨 2개를 합치면 한 단계 위</small></h3>
+      <div class="pots" id="rapBuyGrid"></div>
+      <div class="thint" id="rapInfo"></div>
     </div>
     <div class="ssec">
       <h3>레이저 <small>길을 가로지르는 빔 · 지나가는 적이 닿아 있는 동안 계속 피해 · 좌클릭으로 이동</small></h3>
@@ -335,6 +343,34 @@ const CFG = {
      base:68, body:40, hh:67, bl:54, bw:16, bn:3, splash:63, burn:4, slow:1.8},
   ],
   turretSplashFrac:0.18,
+  // ---- 연사 포탑 : 기관총 계열 ----
+  // 일반 포탑과 똑같이 동작하지만 공격력이 낮고 연사가 아주 빠르다.
+  // 레벨이 올라도 공격력은 그대로(30 고정) — 연사 속도만 빨라진다.
+  // 그래서 초중반엔 강하지만 적 체력이 오르는 후반엔 자연스럽게 밀린다.
+  rapidMax:8,
+  rapidCost0:420, rapidTierMul:2.05, rapidCostMul:1.05,
+  rapidTiers:[
+    {n:'우지', dmg:12, range:150, fire:0.3, col:'#4a4f57', top:'#9aa3ae', style:'rapid',
+     base:26, body:14, hh:13, bl:18, bw:3.6, bn:1},
+    {n:'AK47', dmg:12, range:159, fire:0.2244, col:'#5a4326', top:'#c08a4a', style:'rapid',
+     base:28, body:15.3, hh:15, bl:20, bw:4.1, bn:1},
+    {n:'M16', dmg:12, range:168, fire:0.1679, col:'#2f3a33', top:'#7f9a86', style:'rapid',
+     base:30, body:16.7, hh:18, bl:23, bw:4.7, bn:1},
+    {n:'MP5', dmg:12, range:177, fire:0.1256, col:'#33383f', top:'#8f98a5', style:'rapid',
+     base:32, body:18, hh:20, bl:25, bw:5.2, bn:2},
+    {n:'P90', dmg:12, range:186, fire:0.0939, col:'#2b3340', top:'#7fa8d8', style:'rapid',
+     base:34, body:19.3, hh:22, bl:28, bw:5.8, bn:2},
+    {n:'M4A1', dmg:12, range:194, fire:0.0702, col:'#3a4230', top:'#9db06f', style:'rapid',
+     base:36, body:20.6, hh:25, bl:30, bw:6.3, bn:2},
+    {n:'MG42', dmg:12, range:203, fire:0.0525, col:'#40342c', top:'#b08a63', style:'rapid',
+     base:38, body:22, hh:27, bl:33, bw:6.9, bn:3},
+    {n:'M60', dmg:12, range:212, fire:0.0393, col:'#2d3b33', top:'#6fae86', style:'rapid',
+     base:40, body:23.3, hh:29, bl:35, bw:7.4, bn:3},
+    {n:'M249', dmg:12, range:221, fire:0.0294, col:'#3a3320', top:'#c2b45a', style:'rapid',
+     base:42, body:24.6, hh:32, bl:38, bw:8, bn:3, rotor:1},
+    {n:'미니건', dmg:12, range:230, fire:0.022, col:'#5c2a12', top:'#ffb040', style:'rapid',
+     base:44, body:26, hh:34, bl:40, bw:8.5, bn:3, rotor:1},
+  ],
   // ---- 에너지 병기 ----
   // 코일을 넣으면 일정 시간 동안 자동 발사, 맞으면 무엇이든 즉시 소멸
   // 합체 규칙이 포탑과 다르다 : 레벨이 더해진다 (Lv1+Lv1=Lv2, Lv2+Lv1=Lv3, Lv2+Lv2=Lv4)
@@ -885,7 +921,7 @@ const G = {
   weaponTier:0, armorTier:0, shopOpen:false, potionField:[], buffs:{rageT:0,luckT:0,guardT:0},
   allies:[], enemies:[], shots:[], fx:[], nums:[], beams:[],
   turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1, anim:0, dropInfo:null,
-  launchersBought:0, coilsUsed:0, lasersBought:0, pathIndex:0, potBought:{}, dollBought:{},
+  launchersBought:0, coilsUsed:0, lasersBought:0, rapidsBought:0, pathIndex:0, potBought:{}, dollBought:{},
   lastCp:null, cpList:[],
 };
 
@@ -955,7 +991,7 @@ function reset(){
   G.weaponTier=0; G.armorTier=0; G.shopOpen=false; G.potionField.length=0;
   G.levelOffset=0; G.buffs.rageT=0; G.buffs.luckT=0; G.buffs.guardT=0;
   G.turrets=[]; G.turretsBought=0; G.selTurret=null; G.stopCd=0; G.maxLevelSeen=1;
-  G.launchersBought=0; G.coilsUsed=0; G.lasersBought=0; G.potBought={}; G.dollBought={};
+  G.launchersBought=0; G.coilsUsed=0; G.lasersBought=0; G.rapidsBought=0; G.potBought={}; G.dollBought={};
   G.allies=[]; for(let i=0;i<CFG.allyStart;i++) G.allies.push(newAlly());
   G.lastCp=null; G.cpList=[];
   hideBossLog();
@@ -976,6 +1012,7 @@ function snapshot(){
     pathIndex:G.pathIndex, maxLevelSeen:G.maxLevelSeen, levelOffset:G.levelOffset,
     nextBossLevel:G.nextBossLevel, stopCd:G.stopCd,
     turretsBought:G.turretsBought, launchersBought:G.launchersBought, coilsUsed:G.coilsUsed,
+    lasersBought:G.lasersBought, rapidsBought:G.rapidsBought,
     potBought:Object.assign({},G.potBought), dollBought:Object.assign({},G.dollBought),
     buffs:Object.assign({},G.buffs),
     allies:G.allies.map(a=>({hp:a.hp, dead:a.dead})),
@@ -998,6 +1035,7 @@ function restore(s){
   G.maxLevelSeen=s.maxLevelSeen||1; G.levelOffset=s.levelOffset||0;
   G.nextBossLevel=s.nextBossLevel||CFG.bossEvery; G.stopCd=s.stopCd||0;
   G.turretsBought=s.turretsBought||0; G.launchersBought=s.launchersBought||0; G.coilsUsed=s.coilsUsed||0;
+  G.lasersBought=s.lasersBought||0; G.rapidsBought=s.rapidsBought||0;
   G.potBought=Object.assign({},s.potBought||{}); G.dollBought=Object.assign({},s.dollBought||{});
   if(s.buffs){ G.buffs.rageT=s.buffs.rageT||0; G.buffs.luckT=s.buffs.luckT||0; G.buffs.guardT=s.buffs.guardT||0; }
   G.level=Math.max(1, levelFor(G.time)-G.levelOffset);
@@ -1009,8 +1047,9 @@ function restore(s){
     G.allies[i].dead=!!a.dead; G.allies[i].hp=Math.min(G.allies[i].maxHp, a.hp||G.allies[i].maxHp); });
   // 구조물
   G.turrets=(s.turrets||[]).map(t=>({
-    kind:(t.kind==='launcher'||t.kind==='laser')?t.kind:undefined, tier:t.tier|0, x:t.x, y:t.y,
-    cd:0, shootFlash:0, aim:0, aimT:null, coilT:t.coilT||0,
+    kind:(t.kind==='launcher'||t.kind==='laser'||t.kind==='rapid')?t.kind:undefined,
+    tier:t.tier|0, x:t.x, y:t.y,
+    cd:0, shootFlash:0, aim:0, aimT:null, coilT:t.coilT||0, spin:0,
     ang:(t.kind==='laser'? (t.ang||pathAngleAt(t.x,t.y)) : 0), hitT:0, dealt:0 }));
   G.cpList=(s.cpList||[]).slice();
   // G.lastCp 은 일부러 건드리지 않는다 — 같은 세이브포인트에서 몇 번이든 다시 부활할 수 있어야 한다.
@@ -1053,19 +1092,25 @@ function reviveAtCheckpoint(){
 function kindOf(t){ return (t&&t.kind) || 'turret'; }
 function countKind(kind){ let n=0; for(const t of G.turrets) if(kindOf(t)===kind) n++; return n; }
 function maxOfKind(kind){
-  return kind==='laser' ? CFG.laserMax : kind==='launcher' ? CFG.launcherMax : CFG.turretMax;
+  return kind==='laser' ? CFG.laserMax : kind==='launcher' ? CFG.launcherMax
+       : kind==='rapid' ? CFG.rapidMax : CFG.turretMax;
 }
-function kindName(kind){ return kind==='laser' ? '레이저' : kind==='launcher' ? '에너지 발사기' : '포탑'; }
+function kindName(kind){ return kind==='laser' ? '레이저' : kind==='launcher' ? '에너지 발사기'
+                              : kind==='rapid' ? '연사 포탑' : '포탑'; }
 function isKindFull(kind){ return countKind(kind)>=maxOfKind(kind); }
 function tdef(t){
   const k=kindOf(t);
   return k==='launcher' ? CFG.launcherTiers[t.tier]
        : k==='laser'    ? CFG.laserTiers[t.tier]
+       : k==='rapid'    ? CFG.rapidTiers[t.tier]
                         : CFG.turretTiers[t.tier];
 }
 function isLauncher(t){ return kindOf(t)==='launcher'; }
 function isLaser(t){ return kindOf(t)==='laser'; }
-function maxTier(t){ return (isLauncher(t)?CFG.launcherTiers:CFG.turretTiers).length-1; }
+function isRapid(t){ return kindOf(t)==='rapid'; }
+function tiersOf(t){ return isLauncher(t)?CFG.launcherTiers : isRapid(t)?CFG.rapidTiers
+                          : isLaser(t)?CFG.laserTiers : CFG.turretTiers; }
+function maxTier(t){ return tiersOf(t).length-1; }
 function coilDurOf(t){ return tdef(t).coilDur || CFG.coilDur; }
 // 합체 결과 등급 (합칠 수 없으면 -1)
 //  포탑   : 같은 레벨 2개 → 한 단계 위          (Lv3+Lv3 = Lv4)
@@ -1095,14 +1140,15 @@ function canMerge(a,b){
 // 합체가 안 되는 이유 안내
 function mergeFailMsg(a,b){
   if(!a||!b||a===b) return null;
-  if(isLauncher(a)!==isLauncher(b)) return '포탑과 에너지 병기는 합쳐지지 않습니다';
+  if(kindOf(a)!==kindOf(b)) return kindName(kindOf(a))+'와(과) '+kindName(kindOf(b))+'는 합쳐지지 않습니다';
   if(isLauncher(a)){
     if(mergeResult(a,b)<0) return 'Lv'+(a.tier+1)+'+Lv'+(b.tier+1)+'=Lv'+(a.tier+b.tier+2)
                                   +' — 최고 Lv'+(maxTier(a)+1)+'까지만 가능합니다';
     return 'Lv'+(a.tier+b.tier+2)+' 합체엔 💰'+launcherMergeCost(mergeResult(a,b)).toLocaleString()
            +' 필요 (합체금 + 코일 1개)';
   }
-  if(a.tier!==b.tier) return '포탑은 같은 레벨끼리만 합체됩니다';
+  if(isLaser(a)) return '레이저는 합체할 수 없습니다';
+  if(a.tier!==b.tier) return kindName(kindOf(a))+'은(는) 같은 레벨끼리만 합체됩니다';
   return '최고 등급은 합체할 수 없습니다';
 }
 // 단계가 오를수록 정가가 turretTierMul 배씩 뛴다 (2배보다 크게 잡아 고단계를 비싸게 만든다)
@@ -1165,6 +1211,27 @@ function buyTurret(tier){
   G.turrets.push({tier, x:s.x, y:s.y, cd:Math.random()*0.4, shootFlash:0, aim:0, aimT:null});
   floatText(s.x,s.y,'🏰 '+CFG.turretTiers[tier].n+' 건설!','#8ad3ff');
   burst(s.x,s.y,CFG.turretTiers[tier].top,10);
+  updateShop();
+}
+// ---- 연사 포탑 : 값은 포탑과 같은 방식(정가 x단계배수, 살수록 상승) ----
+function rapidBasePrice(tier){ return Math.round(CFG.rapidCost0*Math.pow(CFG.rapidTierMul, tier||0)); }
+function rapidCost(tier){
+  return Math.round(rapidBasePrice(tier)*Math.pow(CFG.rapidCostMul, G.rapidsBought));
+}
+function buyRapid(tier){
+  tier=Math.max(0,Math.min(CFG.rapidTiers.length-1, tier|0));
+  if(G.phase==='over') return;
+  if(isKindFull('rapid')){
+    floatText(baseNode().x,baseNode().y,'연사 포탑은 최대 '+CFG.rapidMax+'개까지','#ff8a97'); return; }
+  const cost=rapidCost(tier); if(G.gold<cost) return;
+  const R=CFG.rapidTiers[tier];
+  const s=spawnSpot(R.base);
+  if(!s){ floatText(baseNode().x,baseNode().y,'놓을 공간이 없습니다','#ff8a97'); return; }
+  G.gold-=cost; G.rapidsBought++;
+  G.turrets.push({kind:'rapid', tier, x:s.x, y:s.y, cd:Math.random()*0.2,
+                  shootFlash:0, aim:0, aimT:null, hitT:0, dealt:0, spin:0});
+  floatText(s.x,s.y,'🔫 '+R.n+' 배치!',R.top);
+  burst(s.x,s.y,R.top,10);
   updateShop();
 }
 // ---- 레이저 ----
@@ -1283,10 +1350,12 @@ function moveTurret(t,x,y){                             // 포탑을 원하는 �
   return true;
 }
 function autoMerge(){                                   // 가능한 쌍 중 가장 좋은 조합으로 합체
-  const max=CFG.turretTiers.length-1;
-  for(let tier=max-1; tier>=0; tier--){                 // 포탑 : 높은 등급 쌍부터
-    const list=G.turrets.filter(t=>!isLauncher(t) && t.tier===tier);
-    if(list.length>=2) return mergeTurrets(list[0],list[1]);
+  for(const kind of ['turret','rapid']){               // 같은 레벨 2개 → 한 단계 위
+    const max=(kind==='rapid'?CFG.rapidTiers:CFG.turretTiers).length-1;
+    for(let tier=max-1; tier>=0; tier--){
+      const list=G.turrets.filter(t=>kindOf(t)===kind && t.tier===tier);
+      if(list.length>=2) return mergeTurrets(list[0],list[1]);
+    }
   }
   const L=G.turrets.filter(isLauncher);                 // 발사기 : 합쳐서 가장 높아지는 조합
   let best=null, bestR=-1;
@@ -1298,14 +1367,19 @@ function autoMerge(){                                   // 가능한 쌍 중 가
   floatText(baseNode().x,baseNode().y,'합체할 짝이 없습니다','#ff8a97');
   return false;
 }
+// 판매 환불 기준가 (종류별 정가)
+function basePriceOf(t){
+  return isLauncher(t) ? launcherBasePrice(t.tier)
+       : isLaser(t)    ? CFG.laserTiers[t.tier].cost
+       : isRapid(t)    ? rapidBasePrice(t.tier)
+                       : turretBasePrice(t.tier);
+}
 function sellTurret(){
   const t=G.selTurret || G.turrets[G.turrets.length-1];
   if(!t) return;
-  const refund=Math.round((isLauncher(t) ? launcherBasePrice(t.tier)
-                          : isLaser(t)    ? CFG.laserTiers[t.tier].cost
-                          : turretBasePrice(t.tier))*CFG.turretSellFrac);
+  const refund=Math.round(basePriceOf(t)*CFG.turretSellFrac);
   G.gold+=refund; G.turrets=G.turrets.filter(x=>x!==t); G.selTurret=null;
-  floatText(t.x,t.y,'포탑 판매 💰+'+refund,'#ffd166');
+  floatText(t.x,t.y,kindName(kindOf(t))+' 판매 💰+'+refund,'#ffd166');
   updateShop();
 }
 
@@ -1472,14 +1546,21 @@ function update(dt){
       }
       continue;
     }
+    const rap=isRapid(t);
+    if(rap){                                     // 연사 포탑 : 초당 수십 발이라 피해 숫자를 모아 표시
+      t.hitT-=dt;
+      if(t.dealt>0 && t.hitT<=0){ t.hitT=0.4; damageNum(t.x,t.y,Math.round(t.dealt),T.top); t.dealt=0; }
+      if(T.rotor) t.spin=(t.spin||0)+dt*(t.shootFlash>0?26:4);     // 미니건 총열 회전
+    }
     if(t.cd<=0){ const e=t.aimT;                 // 바라보고 있는 그 적을 쏜다
-      if(e){ t.cd=T.fire*(rage?CFG.rageFire:1); t.shootFlash=0.1;
+      if(e){ t.cd=T.fire*(rage?CFG.rageFire:1); t.shootFlash=rap?0.05:0.1;
         t.aim=Math.atan2(e.y-t.y, e.x-t.x);                        // 발사 순간엔 정확히 조준
         const mz=muzzleZ(t), off=T.base*0.2+T.bl;          // drawTurret 의 총구 위치와 동일
         G.shots.push({x:t.x+Math.cos(t.aim)*off, y:t.y+Math.sin(t.aim)*off, z:mz,
-                      target:e,dmg:T.dmg*(rage?CFG.rageDmg:1),speed:640,
-                      col:T.top,splash:T.splash||0,burn:T.burn||0,slow:T.slow||0,size:5+t.tier});
-        burst(t.x+Math.cos(t.aim)*off, t.y+Math.sin(t.aim)*off, T.top, 2); } }
+                      target:e,dmg:T.dmg*(rage?CFG.rageDmg:1),speed:rap?1400:640,
+                      col:T.top,splash:T.splash||0,burn:T.burn||0,slow:T.slow||0,
+                      size:rap?3.2:5+t.tier, src:rap?t:null});
+        if(!rap || !REDUCE) burst(t.x+Math.cos(t.aim)*off, t.y+Math.sin(t.aim)*off, T.top, rap?1:2); } }
   }
   if(active){
     for(const p of G.shots){
@@ -1488,7 +1569,8 @@ function update(dt){
       if(d<=step+p.target.r){
         p.dead=true;
         const cx=p.target.x, cy=p.target.y;
-        hitEnemy(p.target,p.dmg,p,true);
+        if(p.src){ p.src.dealt+=p.dmg; hitEnemy(p.target,p.dmg,p,false); }  // 연사탄은 숫자를 모아서
+        else hitEnemy(p.target,p.dmg,p,true);
         if(p.splash>0){ const r2=p.splash*p.splash;
           for(const e of G.enemies){ if(e===p.target||e.dead) continue;
             if((e.x-cx)**2+(e.y-cy)**2<=r2) hitEnemy(e,p.dmg*CFG.turretSplashFrac,p,false); }
@@ -1746,6 +1828,16 @@ function drawTurret(g,t){
     for(const q of [-1,1]){ const p=side(bw*0.7*q,-3);
       add(p[0],p[1],headZ-2,4,4,22,'#9fe4ff',ang); }
     if(Math.sin(G.anim*9)>0.4) add(t.x,t.y,headZ+headH+20,7,7,7,'#e8f9ff');
+  } else if(S==='rapid'){                                   // 연사 포탑 : 삼각대 + 탄약통 + 탄띠
+    for(let i=0;i<3;i++){                                   // 삼각대 다리
+      const a=i*(Math.PI*2/3)+Math.PI/2, r=T.base*0.30;
+      add(t.x+Math.cos(a)*r, t.y+Math.sin(a)*r, baseH, 5, 5, T.hh*0.9, '#3c424c');
+    }
+    add(t.x,t.y,baseH+T.hh*0.72,bw*0.86,bw*0.86,T.hh*0.28,T.col);        // 회전대
+    for(const q of [-1,1]){ const p=side(bw*0.86*q,-5);                  // 양옆 탄약통
+      add(p[0],p[1],baseH+T.hh*0.5,12,9,11,'#4c5a3a',ang);
+      add(p[0],p[1],baseH+T.hh*0.5+11,10,7,2.5,'#c2b45a',ang); }         // 탄띠(황동)
+    add(t.x,t.y,baseH+T.hh*0.55,bw*1.12,bw*0.5,4,'#c2b45a',ang);         // 급탄 탄띠
   } else if(S==='energy'){                                    // 에너지 발사기 : 코일 챔버 + 방출구
     const on=t.coilT>0, pulse=0.5+0.5*Math.sin(G.anim*(on?7:1.5));
     add(t.x,t.y,baseH,bw*0.86,bw*0.86,T.hh,T.col);                        // 본체 기둥
@@ -1780,6 +1872,20 @@ function drawTurret(g,t){
   const bl=T.bl, bwid=T.bw, bz=headZ+headH*0.30, root=T.base*0.2-recoil*0.35;
   const offs = T.bn===1 ? [0] : T.bn===2 ? [-bwid*0.8, bwid*0.8] : [-bwid*1.45,0,bwid*1.45];
   const nrg=isLauncher(t), charged=nrg&&t.coilT>0;
+  if(T.rotor){                                                          // 미니건 : 돌아가는 총열 뭉치
+    const spin=t.spin||0, R=bwid*1.25;
+    add(t.x,t.y,bz,bl*0.34,bwid*2.5,bwid*2.5, hot?'#ffe9a3':'#3a3f49', ang);   // 로터 하우징
+    for(let i=0;i<6;i++){
+      const a=spin+i*Math.PI/3, c=side(Math.cos(a)*R, root+bl*0.5);
+      add(c[0],c[1],bz+Math.sin(a)*R, bl, bwid*0.72, bwid*0.72, hot?'#fff3c4':'#5a616e', ang);
+    }
+    if(hot){ const f=side(0, root+bl+bwid*1.4);
+      add(f[0],f[1],bz,10,bwid*1.9,bwid*1.9,'#ffd166',ang); }
+    P.sort((a,b)=> (depthOf(a.x,a.y)-depthOf(b.x,b.y)) || a.z-b.z);
+    for(const q of P) rbox(g,q.x,q.y,q.z,q.len,q.wid,q.h,q.a,q.c);
+    turretLabel(g,t,T,headZ,headH);
+    return;
+  }
   for(const so of offs){
     const c=side(so, root+bl*0.5);
     add(c[0],c[1],bz,bl,bwid,bwid, hot?'#fff3c4':(nrg?'#24507e':'#4a5364'), ang);   // 총열/방출관
@@ -1796,9 +1902,13 @@ function drawTurret(g,t){
   P.sort((a,b)=> (depthOf(a.x,a.y)-depthOf(b.x,b.y)) || a.z-b.z);
   for(const q of P) rbox(g,q.x,q.y,q.z,q.len,q.wid,q.h,q.a,q.c);
 
-  // 라벨 : 일반 포탑=등급 / 에너지 발사기=남은 코일 시간
+  turretLabel(g,t,T,headZ,headH);
+}
+// 라벨 : 일반/연사 포탑=등급 / 에너지 발사기=남은 코일 시간
+function turretLabel(g,t,T,headZ,headH){
   const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,headZ+headH+(T.style==='dragon'?34:22));
   const label = isLauncher(t) ? ('Lv'+(t.tier+1)+(t.coilT>0 ? ' ⚡'+Math.ceil(t.coilT)+'초' : ' 코일없음'))
+              : isRapid(t)    ? ('Lv'+(t.tier+1)+' '+T.n)
                               : 'Lv'+(t.tier+1);
   const lcol  = isLauncher(t) ? (t.coilT>0?'#7cf3ff':'#8b97b8') : T.top;
   g.textAlign='center'; g.font='bold '+Math.max(9,11*CAM.scale)+'px Segoe UI';
@@ -1832,6 +1942,7 @@ function updateHUD(){
     el.textContent=n+'/'+max;
     el.parentElement.style.display = n>0 ? '' : 'none';   // 없으면 숨겨 HUD를 좁게 유지
   };
+  optStat('rapidsN', countKind('rapid'), CFG.rapidMax);
   optStat('lasersN', countKind('laser'), CFG.laserMax);
   optStat('launchersN', countKind('launcher'), CFG.launcherMax);
   document.getElementById('uplv').textContent='Lv '+G.upTotal;
@@ -1922,7 +2033,9 @@ function updateShop(){
          : '포탑 '+countKind('turret')+'/'+CFG.turretMax+'개 · 산 포탑은 화면에서 끌어 원하는 곳에 배치';
   const maxT=CFG.turretTiers.length-1;
   let pair=-1;
-  for(let i=maxT-1;i>=0;i--){ if(G.turrets.filter(t=>!isLauncher(t)&&t.tier===i).length>=2){ pair=i; break; } }
+  for(let i=maxT-1;i>=0;i--){ if(G.turrets.filter(t=>kindOf(t)==='turret'&&t.tier===i).length>=2){ pair=i; break; } }
+  let rPair=-1;                                       // 연사 포탑 합체 짝
+  for(let i=CFG.rapidTiers.length-2;i>=0;i--){ if(G.turrets.filter(t=>isRapid(t)&&t.tier===i).length>=2){ rPair=i; break; } }
   let nrgPair=null, nrgBest=-1;                       // 발사기 조합(레벨 합)
   const LL=G.turrets.filter(isLauncher);
   for(let i=0;i<LL.length;i++) for(let j=i+1;j<LL.length;j++){
@@ -1932,12 +2045,15 @@ function updateShop(){
   mb.textContent = pair>=0
     ? ('⚡ 합체\nLv'+(pair+1)+'×2 → '+CFG.turretTiers[pair+1].n
        +'\n연사 초당 '+(1/CFG.turretTiers[pair].fire).toFixed(1)+'→'+(1/CFG.turretTiers[pair+1].fire).toFixed(1)+'발')
+    : rPair>=0
+    ? ('⚡ 합체\n연사 Lv'+(rPair+1)+'×2 → '+CFG.rapidTiers[rPair+1].n
+       +'\n연사 초당 '+(1/CFG.rapidTiers[rPair].fire).toFixed(1)+'→'+(1/CFG.rapidTiers[rPair+1].fire).toFixed(1)+'발')
     : (nrgPair
        ? ('⚡ 합체\n발사기 Lv'+(nrgPair[0].tier+1)+'+Lv'+(nrgPair[1].tier+1)+' → Lv'+(nrgBest+1)
           +'\n💰'+launcherMergeCost(nrgBest).toLocaleString()+' (합체금+코일)')
        : '⚡ 합체\n합칠 짝이 없음');
   mb.style.whiteSpace='pre-line';
-  mb.disabled=(pair<0 && (!nrgPair || G.gold<launcherMergeCost(nrgBest)));
+  mb.disabled=(pair<0 && rPair<0 && (!nrgPair || G.gold<launcherMergeCost(nrgBest)));
   const sb=document.getElementById('sellTurret'), st=G.selTurret||G.turrets[G.turrets.length-1];
   sb.textContent = st ? ('♻ 판매\n'+tdef(st).n+' 💰+'+Math.round((isLauncher(st)?launcherBasePrice(st.tier)
                             :isLaser(st)?CFG.laserTiers[st.tier].cost
@@ -1945,12 +2061,28 @@ function updateShop(){
                       : '♻ 판매\n보유 구조물 없음';
   sb.style.whiteSpace='pre-line'; sb.disabled=!st;
   const counts=new Array(CFG.turretTiers.length).fill(0);
-  for(const t of G.turrets) if(!isLauncher(t)) counts[t.tier]++;
+  for(const t of G.turrets) if(kindOf(t)==='turret') counts[t.tier]++;
+  const rCounts=new Array(CFG.rapidTiers.length).fill(0);
+  for(const t of G.turrets) if(isRapid(t)) rCounts[t.tier]++;
   const lch=G.turrets.filter(isLauncher);
   const chips=counts.map((c,i)=>c?'<span class="tchip">Lv'+(i+1)+' '+CFG.turretTiers[i].n+' <b>×'+c+'</b></span>':'').join('')
+    + rCounts.map((c,i)=>c?'<span class="tchip">🔫 Lv'+(i+1)+' '+CFG.rapidTiers[i].n+' <b>×'+c+'</b></span>':'').join('')
     + G.turrets.filter(isLaser).map(t=>'<span class="tchip">📡 Lv'+(t.tier+1)+' 레이저</span>').join('')
     + lch.map(t=>'<span class="tchip">⚡ Lv'+(t.tier+1)+' 발사기 <b>'+(t.coilT>0?Math.ceil(t.coilT)+'초':'코일 없음')+'</b></span>').join('');
   document.getElementById('turList').innerHTML = chips || '<span class="tchip">보유 구조물 없음</span>';
+
+  // 연사 포탑
+  for(let i=0;i<CFG.rapidTiers.length;i++){
+    const R=CFG.rapidTiers[i], b=document.getElementById('buyRap_'+i), c=rapidCost(i);
+    b.textContent='Lv'+(i+1)+' '+R.n+'\n공격 '+R.dmg+' × 초당 '+(1/R.fire).toFixed(1)+'발'
+                 +'\n초당 화력 '+Math.round(R.dmg/R.fire).toLocaleString()+' · 💰'+c.toLocaleString();
+    b.disabled = isKindFull('rapid') || G.gold<c;
+    b.style.borderLeft='4px solid '+R.top;
+  }
+  document.getElementById('rapInfo').textContent =
+    (isKindFull('rapid') ? '⚠ 연사 포탑은 최대 '+CFG.rapidMax+'개까지 · ' : '')
+    +'연사 포탑 '+countKind('rapid')+'/'+CFG.rapidMax+'대 (포탑 개수와 별도) · '
+    +'공격력이 오르지 않으니 적이 세지는 후반에는 힘이 빠집니다. 초중반 화력용입니다.';
 
   // 레이저
   for(let i=0;i<CFG.laserTiers.length;i++){
@@ -2309,6 +2441,15 @@ document.getElementById('shopClose').onclick=closeShop;
   });
 })();
 document.getElementById('mergeTurret').onclick=()=>{ autoMerge(); updateShop(); };
+(function buildRapidShop(){                      // 레벨별 연사 포탑 구매 버튼
+  const grid=document.getElementById('rapBuyGrid');
+  CFG.rapidTiers.forEach((R,i)=>{
+    const b=document.createElement('button');
+    b.id='buyRap_'+i; b.className='buy rap'; b.style.whiteSpace='pre-line';
+    b.onclick=()=>buyRapid(i);
+    grid.appendChild(b);
+  });
+})();
 (function buildLaserShop(){                      // 레벨별 레이저 구매 버튼
   const grid=document.getElementById('laserBuyGrid');
   CFG.laserTiers.forEach((L,i)=>{
