@@ -25,7 +25,17 @@
     font-family:"Segoe UI",system-ui,-apple-system,sans-serif; overflow:hidden}
   #wrap{position:fixed; inset:0; display:flex; flex-direction:column;
     padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-  #installBtn{background:#38e8b0; display:none}
+  #installBtn{background:#38e8b0}
+  #howto{position:absolute; inset:0; z-index:40; display:none; place-items:center;
+    background:rgba(6,10,22,.9); backdrop-filter:blur(3px); padding:14px}
+  #howto .card{background:var(--panel); border:1px solid #2b3552; border-radius:16px;
+    padding:16px 18px; width:min(460px,96vw); max-height:94vh; overflow:auto}
+  #howto h3{margin:0 0 10px; font-size:17px}
+  #howto ol{margin:0 0 10px; padding-left:20px; line-height:1.9; font-size:14px}
+  #howto .diag{background:#0e1428; border:1px solid #2b3552; border-radius:10px;
+    padding:8px 10px; font-size:11.5px; color:var(--muted); line-height:1.7; margin-bottom:10px}
+  #howto .diag b{color:var(--text)}
+  #howto .ok{color:#38e8b0} #howto .no{color:#ff5a6a}
   #rotHint{position:absolute; inset:0; z-index:30; display:none; place-items:center; text-align:center;
     background:rgba(6,10,22,.94); padding:30px}
   #rotHint div{font-size:17px; line-height:1.7}
@@ -241,6 +251,12 @@
 </div>
 <div id="rotHint"><div><span class="big">📱↻</span>
   휴대폰을 <b>가로로</b> 돌려 주세요<br><span style="color:#8b97b8;font-size:14px">게임판이 가로로 넓습니다</span></div></div>
+<div id="howto"><div class="card">
+  <h3>📲 앱으로 설치하기</h3>
+  <div class="diag" id="howtoDiag"></div>
+  <ol id="howtoSteps"></ol>
+  <button id="howtoClose" style="background:#2b3552;color:var(--text);width:100%">닫기</button>
+</div></div>
 <div id="shop">
   <div class="scard">
     <div class="shead">
@@ -2535,24 +2551,68 @@ if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
 }
 
-// 안드로이드·크롬 : 설치 가능해지면 HUD에 "앱 설치" 버튼을 띄운다
+// ---- 앱 설치 ----
+// 아이폰(사파리)은 자동 설치 이벤트가 아예 없다. 그래서 버튼을 이벤트에 기대지 않고
+// 항상 띄워 두고, 누르면 그 기기에 맞는 방법을 화면에 직접 알려 준다.
 let deferredInstall=null;
 const installBtn=document.getElementById('installBtn');
+const howto=document.getElementById('howto');
+const standalone = window.matchMedia('(display-mode: standalone)').matches
+                || window.matchMedia('(display-mode: fullscreen)').matches
+                || navigator.standalone===true;
+if(standalone) installBtn.remove();                       // 이미 앱으로 실행 중
+
 window.addEventListener('beforeinstallprompt', ev=>{
-  ev.preventDefault(); deferredInstall=ev; installBtn.style.display='inline-block';
+  ev.preventDefault(); deferredInstall=ev;
+  if(!standalone) installBtn.textContent='📲 앱 설치';
 });
-installBtn.onclick=async()=>{
-  if(!deferredInstall){                                  // 아이폰 등 자동 설치가 없는 환경 안내
-    alert('아이폰(사파리) : 아래 공유 버튼 → "홈 화면에 추가"\n안드로이드(크롬) : 우측 상단 ⋮ → "앱 설치"');
-    return;
+window.addEventListener('appinstalled', ()=>{
+  deferredInstall=null; howto.style.display='none';
+  if(installBtn) installBtn.remove();
+});
+
+const UA=navigator.userAgent;
+const isIOS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+const isSafari = isIOS && !/CriOS|FxiOS|EdgiOS|OPiOS|Whale|NAVER|KAKAOTALK|Line|FBAN|FBAV|Instagram/i.test(UA);
+const inApp = /KAKAOTALK|NAVER|Line|FBAN|FBAV|Instagram|DaumApps/i.test(UA);
+
+function installSteps(){
+  if(inApp) return ['지금 <b>카카오톡·네이버 같은 앱 안의 브라우저</b>로 열려 있습니다. 여기서는 설치가 안 됩니다.',
+                    '오른쪽 아래(또는 위) <b>⋯ 메뉴 → "다른 브라우저로 열기"</b> 를 누르세요.',
+                    '<b>크롬</b>(안드로이드) 또는 <b>사파리</b>(아이폰)로 연 다음 다시 이 버튼을 누르세요.'];
+  if(isIOS && !isSafari) return ['아이폰에서는 <b>사파리</b>로 열어야 설치할 수 있습니다.',
+                    '주소를 복사해 <b>사파리</b>에서 연 다음 다시 시도하세요.'];
+  if(isIOS) return ['화면 <b>아래쪽 가운데 공유 버튼 <span style="color:#8ad3ff">⬆️</span></b> 를 누르세요.',
+                    '메뉴를 <b>아래로 넘겨</b> <b>"홈 화면에 추가"</b> 를 찾아 누르세요.',
+                    '오른쪽 위 <b>"추가"</b> 를 누르면 끝입니다.'];
+  return ['브라우저 <b>오른쪽 위 ⋮ (점 세 개)</b> 를 누르세요.',
+          '<b>"앱 설치"</b> 또는 <b>"홈 화면에 추가"</b> 를 누르세요.',
+          '<b>"설치"</b> 를 누르면 끝입니다.'];
+}
+async function showDiag(){
+  const yes=t=>'<span class="ok">✅ '+t+'</span>', no=t=>'<span class="no">❌ '+t+'</span>';
+  const rows=[];
+  rows.push('주소 : <b>'+location.protocol+'//'+location.host+'</b> '
+    +(location.protocol==='https:'?yes('https 맞음'):no('https 가 아니면 설치 불가')));
+  let sw=false; try{ sw=!!(await navigator.serviceWorker.getRegistration()); }catch(e){}
+  rows.push('오프라인 준비 : '+(sw?yes('됨'):no('안 됨 — 새로고침 한 번 해보세요')));
+  let mf=false; try{ mf=(await fetch('manifest.webmanifest')).ok; }catch(e){}
+  rows.push('앱 정보 파일 : '+(mf?yes('읽힘'):no('못 읽음')));
+  rows.push('자동 설치 버튼 : '+(deferredInstall?yes('사용 가능'):'⏳ 없음 (아이폰은 원래 없음 — 아래 방법으로)'));
+  document.getElementById('howtoDiag').innerHTML=rows.join('<br>');
+}
+if(installBtn) installBtn.onclick=async()=>{
+  if(deferredInstall){                                    // 안드로이드·크롬 : 바로 설치창
+    deferredInstall.prompt();
+    const r=await deferredInstall.userChoice;
+    deferredInstall=null;
+    if(r && r.outcome==='accepted'){ installBtn.remove(); return; }
   }
-  deferredInstall.prompt();
-  await deferredInstall.userChoice;
-  deferredInstall=null; installBtn.style.display='none';
+  document.getElementById('howtoSteps').innerHTML=installSteps().map(t=>'<li>'+t+'</li>').join('');
+  await showDiag();
+  howto.style.display='grid';
 };
-window.addEventListener('appinstalled', ()=>{ installBtn.style.display='none'; deferredInstall=null; });
-// 이미 앱으로 설치해 실행 중이면 설치 버튼을 아예 숨긴다
-if(window.matchMedia('(display-mode: standalone)').matches || navigator.standalone) installBtn.remove();
+document.getElementById('howtoClose').onclick=()=>{ howto.style.display='none'; };
 
 // 게임 중에는 화면이 꺼지지 않게 (지원하는 기기에서만)
 let wakeLock=null;
