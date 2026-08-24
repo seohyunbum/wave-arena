@@ -290,13 +290,17 @@ const EYE_COL='#141a24';
 // lod = 디테일 단계 (0=전체, 1=얼굴/손 생략, 2=최소, 3=극한 부하용 실루엣)
 function characterCompact(g,x,y,s,C,phase,moving,face){
   const bob=moving&&!REDUCE?Math.abs(Math.sin(phase))*1.3*s:0;
-  const ca=Math.cos(face),sa=Math.sin(face), side=(offset)=>({x:x-sa*offset*s,y:y+ca*offset*s});
-  const left=side(3.7),right=side(-3.7);
-  rbox(g,left.x,left.y,3.5*s,6.5*s,6.5*s,16*s,face,C.leg);
-  rbox(g,right.x,right.y,3.5*s,6.5*s,6.5*s,16*s,face,C.leg);
-  rbox(g,x,y,(22+bob)*s,9*s,18*s,18*s,face,C.torso);
-  rbox(g,x,y,(42+bob)*s,10.5*s,11.5*s,11*s,face,C.skin);
-  rbox(g,x,y,(52.5+bob)*s,11.2*s,12.2*s,3.2*s,face,C.hair);
+  const u=Math.max(.65,CAM.scale*s),sx=isoX(x,y),sy=isoY(x,y,0)-bob*CAM.scale;
+  // 고밀도 화면에서 3D 부품은 수 픽셀로 겹친다. 동일 팔레트의 선명한 블록 실루엣으로 읽힘을 보존한다.
+  g.fillStyle=C.leg;
+  g.fillRect(sx-4.5*u,sy-10*u,3.5*u,10*u); g.fillRect(sx+u,sy-10*u,3.5*u,10*u);
+  g.fillStyle=C.torso; g.fillRect(sx-5.5*u,sy-20*u,11*u,11*u);
+  g.fillStyle=C.skin; g.fillRect(sx-3.8*u,sy-27*u,7.6*u,7.6*u);
+  g.fillStyle=C.hair; g.fillRect(sx-4*u,sy-28.5*u,8*u,2.3*u);
+  const tx=isoX(x+Math.cos(face)*10,y+Math.sin(face)*10),ty=isoY(x+Math.cos(face)*10,y+Math.sin(face)*10,0);
+  const dx=tx-sx,dy=ty-isoY(x,y,0),dl=Math.hypot(dx,dy)||1;
+  g.strokeStyle=C.hair; g.lineWidth=Math.max(1,1.5*u); g.beginPath();
+  g.moveTo(sx,sy-16*u); g.lineTo(sx+dx/dl*5*u,sy-16*u+dy/dl*5*u); g.stroke();
   return 56*s+bob;
 }
 function character(g,x,y,s,C,phase,moving,face,pose,lod){
@@ -566,7 +570,8 @@ function buildGround(){
 }
 
 function resize(){
-  DPR=Math.min(MOBILE_GPU?1.5:2, window.devicePixelRatio||1);
+  const deviceDpr=Math.min(MOBILE_GPU?1.5:2, window.devicePixelRatio||1);
+  DPR=RENDER_DENSE?Math.min(DENSE_DPR_CAP,deviceDpr):deviceDpr;
   W=cv.clientWidth; H=cv.clientHeight; cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
   ctx.setTransform(DPR,0,0,DPR,0,0);
   fitCamera(); buildBackdrop(); buildGround(); buildPostFx();

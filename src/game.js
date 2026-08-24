@@ -759,6 +759,9 @@ function update(dt){
 }
 
 function draw(){
+  const EN=G.enemies.length;
+  const SCENE_DENSE=EN>45 && G.turrets.length>=30;
+  if(RENDER_DENSE!==SCENE_DENSE){ RENDER_DENSE=SCENE_DENSE; resize(); }
   if(backdrop) ctx.drawImage(backdrop,0,0,W,H);
   const shake=REDUCE?0:G.shake, sx=shake?(Math.random()*2-1)*shake:0, sy=shake?(Math.random()*2-1)*shake*.65:0;
   ctx.save(); ctx.translate(sx,sy);
@@ -783,8 +786,6 @@ function draw(){
 
   // 극한 개체 수에서는 화면상 몇 픽셀뿐인 세부 부품을 실루엣 LOD로 대체한다.
   // 평상시에는 기존 전체 디테일을 유지하고, 60적+30구조물급에서만 프레임 예산을 우선한다.
-  const EN=G.enemies.length;
-  const SCENE_DENSE=EN>45 && G.turrets.length>=30;
   const LOD = SCENE_DENSE ? 3 : EN>45 ? 2 : EN>22 ? 1 : 0;
 
   // 접지 그림자는 유닛보다 먼저 그려 높이감과 가독성을 확보

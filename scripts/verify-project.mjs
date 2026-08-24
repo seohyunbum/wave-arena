@@ -30,6 +30,8 @@ assert(gates.flows.includes('offline-navigation') && gates.flows.includes('save-
   'Critical flow gates are missing.');
 assert(gates.performance.normal.minFps > gates.performance.cpu4x.minFps,
   'Performance budgets are not ordered by CPU profile.');
+assert(gates.performance.maxDenseDpr > 0 && gates.performance.maxDenseDpr < gates.performance.viewport.dpr,
+  'Dense DPR cap must be lower than the performance viewport DPR.');
 
 for (const asset of meta.precache) {
   if (asset === './') continue;

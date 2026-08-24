@@ -21,6 +21,7 @@
   "performance": {
     "viewport": { "width": 844, "height": 390, "dpr": 1.5 },
     "durationMs": 4000,
+    "maxDenseDpr": 1.25,
     "enemyCount": 60,
     "minStructures": 30,
     "normal": {
