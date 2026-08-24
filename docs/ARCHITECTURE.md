@@ -52,10 +52,12 @@ ADR-005: 고밀도 LOD는 작은 화면에서 식별되지 않는 미세 부품�
 ADR-006: 고밀도 장면의 내부 DPR은 1.25를 하한이 아닌 상한으로 사용하며, 장면 해제 시 장치별 기본 DPR로 즉시 복귀한다.
 ADR-007: precache는 항목 하나만 실패해도 설치를 실패시키되, CDN 일시 오류에 한해 전체 설치를 최대 3회 새로 시도한다.
 ADR-008: 회전·오프라인·프레임 예산을 위해 생성 비트맵 대신 코드 네이티브 절차형 시각 진화를 사용한다. 단계 정의와 렌더 구현은 분리한다.
+ADR-009: 밸런스 게이트는 개별 아이템 수치를 고정하지 않고 역할별 성장률과 적 HP 대비 보상의 넓은 밴드만 검사한다.
 
 ## Change rules
 
 - game 변경: verify-project, smoke, perf 필수.
+- balance 변경: balance-report와 docs/BALANCE_BASELINE.md 표본 갱신 필수.
 - PWA/asset 변경: build-meta precache와 offline navigation 필수.
 - save 구조 변경: version bump, migration, save/load fixture 필수.
 - renderer 변경: 4 viewport와 performance budget 필수.

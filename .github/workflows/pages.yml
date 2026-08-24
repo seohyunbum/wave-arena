@@ -32,7 +32,9 @@ jobs:
           node --check scripts/cdp-harness.mjs
           node --check scripts/smoke-test.mjs
           node --check scripts/perf-test.mjs
+          node --check scripts/balance-report.mjs
           node --check scripts/verify-project.mjs
+          node scripts/balance-report.mjs --check
           node scripts/verify-project.mjs
       - name: 브라우저 기능·오프라인·성능 게이트
         shell: bash

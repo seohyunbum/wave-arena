@@ -23,13 +23,12 @@ const CFG = {
   // 종류별로 따로 세는 보유 상한 (자리는 고정되지 않고 어디든 자유 배치)
   turretMax:14, laserMax:10, launcherMax:6,
   turretGap:5, turretEdge:14,                  // 받침끼리 띄울 여유 간격 / 맵 가장자리 여백
-  // 편의 프리미엄(x1.15)을 기본가에 녹여 두었다(110 -> 127).
-  // 덕분에 모든 단계가 "기본가 x 2^단계" 하나의 식으로 완전히 동일하게 계산되고,
-  // 같은 단계 2개를 합치든 다음 단계를 사든 값이 정확히 똑같다.
-  turretCost0:600, turretCostMul:1.06, turretSellFrac:0.5, turretTierMul:2.35,
+  // 일반 포탑은 연사 포탑보다 진입 효율이 낮지만 4단계 광역, 5단계 화상, 6단계 감속을 얻는 범용 계열이다.
+  // 초기 진입비만 완화하고 상위 단계 슬롯 압축 프리미엄은 유지한다.
+  turretCost0:520, turretCostMul:1.06, turretSellFrac:0.5, turretTierMul:2.35,
   // style = 등급별 외형 / base·body·hh = 크기 / bl·bw·bn = 총열 길이·굵기·개수
-  // 등급이 오를수록 연사가 크게 빨라진다 (초당 1.1발 → 10발)
-  // DPS는 단계당 x1.85 (가격은 x2) → 상위 단계는 "골드당 효율"이 점점 나빠지는 편의 구매
+  // 등급이 오를수록 연사가 크게 빨라진다 (초당 약 1발 → 5발)
+  // DPS는 단계당 약 x1.68, 기준가는 x2.35 → 상위 단계는 효율보다 슬롯 압축·광역 효과를 산다.
   turretTiers:[
     {n:'목재 포탑', dmg:15, range:165, fire:0.95, col:'#a9743a', top:'#d0964e', style:'wood',
      base:30, body:17, hh:15, bl:16, bw:5, bn:1},
@@ -126,7 +125,8 @@ const CFG = {
   coilDur:60,                                   // 기본 지속(레벨이 오르면 launcherTiers.coilDur 사용)
   // ---- 보스 (스테이지 5마다) ----
   bossLogDur:9, bossFloatLife:4,                 // 보스 보상 창 표시(초) / 떠오르는 글자 지속(초)
-  bossEvery:5, bossHpMult:12, bossDmgMult:2.6, bossSpeedMult:0.72, bossRMult:2.4, bossReward:60, bossGoldBase:90,
+  // 일반 적 28배 체력으로 몇 차례 집중 사격을 견디되, 처치 골드는 보스 등급에 맞춰 보상한다.
+  bossEvery:5, bossHpMult:28, bossDmgMult:2.6, bossSpeedMult:0.72, bossRMult:2.4, bossGoldBase:110,
   // ---- 상점 ----
   defK:60, defMaxCut:0.95, poisonFrac:0.025,  // 방어 경감 상한 95% / 독 초당 피해(최대체력 비율)                         // 방어력 경감 계수 / 독 초당 피해(최대체력 비율)
   weapons:[{n:'맨손',dmg:0},
