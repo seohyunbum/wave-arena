@@ -9,7 +9,7 @@ Canonical config: quality-gates.json
 2. 기능 계약: 시작, 상점, 회전, 음소거 저장, 포탑 배치·합체, 저장·복원, 끝내기.
 3. 화면 계약: 1440×900, 1280×720, 844×390, 740×360에서 canvas와 핵심 조작이 렌더링된다.
 4. 접근성 계약: prefers-reduced-motion에서 REDUCE가 활성화되고 파티클 수가 축소된다.
-5. PWA 계약: precache 전 항목이 존재하고 네트워크 차단 후 재탐색해 같은 build ID가 실행된다.
+5. PWA 계약: precache 전 항목이 존재하고, 최초 설치는 일시 실패 시 최대 3회 재시도하며, 네트워크 차단 후 재탐색해 같은 build ID가 실행된다.
 6. 성능 계약: quality-gates.json의 정상/CPU 4배 제한 예산을 모두 통과하고 CI가 perf-result.json artifact를 보존한다.
 7. 배포 계약: main CI 통과 뒤 GitHub Pages 공개 URL에서 smoke가 다시 통과한다.
 

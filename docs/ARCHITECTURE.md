@@ -19,7 +19,7 @@ Last reviewed: 2026-08-25
 - src/game/render.js: 월드·카메라·Canvas 렌더러를 담당한다.
 - src/game.js: 상태·저장·전투 시뮬레이션 core를 담당한다.
 - src/game/ui.js: HUD·상점·입력·게임 시작 bootstrap을 담당한다.
-- src/platform/pwa.js: 설치, 서비스워커, wake lock, 터치 브라우저 제약을 담당한다.
+- src/platform/pwa.js: 설치, fail-closed 서비스워커의 최초 등록 재시도, wake lock, 터치 브라우저 제약을 담당한다.
 
 이번 분리는 위험이 큰 전면 재작성 대신 배포·플랫폼 경계를 먼저 떼어낸 1단계다. 다음 분리는 동작 불변 테스트를 유지하면서 core/state, systems, render, ui 순으로 진행한다.
 
@@ -47,6 +47,7 @@ ADR-003: Build metadata와 precache를 한 파일에서 관리한다.
 ADR-004: 문서 품질 게이트는 quality-gates.json과 scripts에서 실행되지 않으면 gate로 인정하지 않는다.
 ADR-005: 고밀도 LOD는 작은 화면에서 식별되지 않는 미세 부품만 줄이고 실루엣·종류·방향·상태 신호를 보존한다.
 ADR-006: 고밀도 장면의 내부 DPR은 1.25를 하한이 아닌 상한으로 사용하며, 장면 해제 시 장치별 기본 DPR로 즉시 복귀한다.
+ADR-007: precache는 항목 하나만 실패해도 설치를 실패시키되, CDN 일시 오류에 한해 전체 설치를 최대 3회 새로 시도한다.
 
 ## Change rules
 

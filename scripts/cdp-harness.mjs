@@ -75,12 +75,13 @@ export async function launchBrowser(targetUrl, initialViewport = { width: 844, h
   const pending = new Map();
   const exceptions = [];
   const errorLogs = [];
+  const commandTimeoutMs=Math.max(5000,Number(process.env.CDP_TIMEOUT_MS)||30000);
   const send = (method, params = {}) => new Promise((resolveSend, rejectSend) => {
     const id = ++nextId;
     const timer = setTimeout(() => {
       pending.delete(id);
       rejectSend(new Error('CDP timeout: ' + method));
-    }, 15000);
+    }, commandTimeoutMs);
     pending.set(id, { resolveSend, rejectSend, timer });
     socket.send(JSON.stringify({ id, method, params }));
   });

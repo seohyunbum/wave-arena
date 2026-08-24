@@ -4,6 +4,7 @@ import { launchBrowser, wait } from './cdp-harness.mjs';
 const gates = JSON.parse(await readFile(new URL('../quality-gates.json', import.meta.url), 'utf8'));
 const targetUrl = new URL(process.argv[2] || 'http://127.0.0.1:4173/').href;
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
+const pwaWaitMs=Math.max(5000,Number(process.env.PWA_WAIT_MS)||20000);
 
 await fetch(targetUrl, { cache: 'no-store' }).then(response => {
   if (!response.ok) throw new Error('Game server returned ' + response.status);
@@ -91,21 +92,24 @@ try {
       'await new Promise(done=>setTimeout(done,300));' +
       'const cache=await caches.open(WA_BUILD_META.cacheVersion); const requests=await cache.keys();' +
       'return {active:Boolean(registration.active),controller:Boolean(navigator.serviceWorker.controller),' +
-        'script:registration.active&&registration.active.scriptURL||"",cache:WA_BUILD_META.cacheVersion,' +
+        'script:registration.active&&registration.active.scriptURL||"",diagnostic:globalThis.WA_SW_DIAGNOSTIC||null,cache:WA_BUILD_META.cacheVersion,' +
         'cached:requests.map(request=>request.url),expected:WA_BUILD_META.precache.map(path=>new URL(path,location.href).href)};' +
     '}),' +
-    'new Promise(done=>setTimeout(()=>done({active:false,controller:false,cached:[],expected:[]}),5000))' +
+    'new Promise(done=>setTimeout(()=>done({active:false,controller:false,cached:[],expected:[]}),'+pwaWaitMs+'))' +
   '])', true);
 
   if (!pwa.controller) {
     await browser.send('Page.reload', { ignoreCache: true });
     await wait(1000);
-    pwa = await browser.evaluate('navigator.serviceWorker.ready.then(async registration=>{' +
-      'const cache=await caches.open(WA_BUILD_META.cacheVersion); const requests=await cache.keys();' +
-      'return {active:Boolean(registration.active),controller:Boolean(navigator.serviceWorker.controller),' +
-        'script:registration.active&&registration.active.scriptURL||"",cache:WA_BUILD_META.cacheVersion,' +
-        'cached:requests.map(request=>request.url),expected:WA_BUILD_META.precache.map(path=>new URL(path,location.href).href)};' +
-    '})', true);
+    pwa = await browser.evaluate('Promise.race([' +
+      'navigator.serviceWorker.ready.then(async registration=>{' +
+        'const cache=await caches.open(WA_BUILD_META.cacheVersion); const requests=await cache.keys();' +
+        'return {active:Boolean(registration.active),controller:Boolean(navigator.serviceWorker.controller),' +
+          'script:registration.active&&registration.active.scriptURL||"",diagnostic:globalThis.WA_SW_DIAGNOSTIC||null,cache:WA_BUILD_META.cacheVersion,' +
+          'cached:requests.map(request=>request.url),expected:WA_BUILD_META.precache.map(path=>new URL(path,location.href).href)};' +
+      '}),' +
+      'new Promise(done=>setTimeout(()=>done({active:false,controller:false,cached:[],expected:[]}),'+pwaWaitMs+'))' +
+    '])', true);
   }
 
   assert(initial.build === initial.meta.buildId, 'Runtime build differs from canonical metadata.');
@@ -121,7 +125,10 @@ try {
     gameplay.restoredState.tier === 1, 'Save/restore contract failed.');
   assert(gameplay.stopped, 'Stop flow failed.');
   assert(assets.length === 6 && assets.every(asset => asset.status === 200), 'A CC0 audio file failed.');
-  assert(pwa.active && pwa.controller && pwa.script.endsWith('/sw.js'), 'Service worker did not control the page.');
+  assert(pwa.active && pwa.controller && pwa.script.endsWith('/sw.js'),
+    'Service worker did not control the page: ' + JSON.stringify(pwa.diagnostic));
+  assert(pwa.diagnostic?.status === 'ready',
+    'Service worker registration diagnostic is not ready: ' + JSON.stringify(pwa.diagnostic));
   assert(pwa.cache === initial.meta.cacheVersion, 'Service worker cache version drifted.');
   assert(pwa.expected.every(url => pwa.cached.includes(url)), 'A canonical precache asset is missing.');
 
@@ -164,7 +171,7 @@ try {
     rotation,
     audio,
     gameplay,
-    pwa: { active: pwa.active, controller: pwa.controller, cached: pwa.cached.length },
+    pwa: { active: pwa.active, controller: pwa.controller, cached: pwa.cached.length, diagnostic: pwa.diagnostic },
     offline,
     reduced,
     exceptions: browser.exceptions,
