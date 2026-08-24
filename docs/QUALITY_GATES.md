@@ -16,7 +16,7 @@ Canonical config: quality-gates.json
 
 ## Performance scene
 
-844×390에서 두 장면을 계측한다. 첫째는 DPR 1.5, 적 20마리와 최고 등급 구조물 30개 이상으로 고등급 재질·코어·발사체 비용과 중간 LOD를 검증한다. 둘째는 적 60마리와 같은 구조물 부하로 dense LOD 및 DPR 1.25 상한을 검증한다. 기본 CPU와 DevTools 4배 CPU 제한을 각각 계측한다. FPS만 보지 않고 p95 frame time과 long-frame 비율을 함께 판정한다. 이 장면은 고밀도 LOD와 내부 DPR 1.25 상한의 발동도 검증하며, 평상시 렌더 품질과 분리된 최악 부하 예산으로 관리한다.
+844×390에서 두 장면을 계측한다. 첫째는 적 20마리와 최고 등급 구조물 30개 이상으로 pressure LOD, DPR 1.25 상한, 등급 코어·발사체 식별성을 검증한다. 둘째는 적 60마리와 같은 구조물 부하로 dense LOD 및 DPR 1.25 상한을 검증한다. 기본 CPU와 DevTools 4배 CPU 제한을 각각 계측한다. FPS만 보지 않고 p95 frame time과 long-frame 비율을 함께 판정한다. 이 장면은 고밀도 LOD와 내부 DPR 1.25 상한의 발동도 검증하며, 평상시 렌더 품질과 분리된 최악 부하 예산으로 관리한다.
 
 발사체·장갑·포탑 디테일은 평상시 장면에서 검증하고, 고밀도 장면은 동일 종류·방향·등급 코어를 유지한 LOD로 검증한다. 시각 진화 정본은 docs/VISUAL_PROGRESSION.md다.
 

@@ -619,10 +619,12 @@ function buildGround(){
 
 function resize(){
   const deviceDpr=Math.min(MOBILE_GPU?1.5:2, window.devicePixelRatio||1);
-  DPR=RENDER_DENSE?Math.min(DENSE_DPR_CAP,deviceDpr):deviceDpr;
+  DPR=(RENDER_DENSE||RENDER_PRESSURE)?Math.min(DENSE_DPR_CAP,deviceDpr):deviceDpr;
   W=cv.clientWidth; H=cv.clientHeight; cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
   ctx.setTransform(DPR,0,0,DPR,0,0);
-  fitCamera(); buildBackdrop(); buildGround(); buildPostFx();
+  fitCamera(); buildBackdrop(); buildPostFx();
+  if(!GAME_READY) return;
+  buildGround();
   if(G.allies.length) layoutAllies();
 }
 window.addEventListener('resize', resize);

@@ -64,8 +64,8 @@ try {
   assert(detailLoad.enemies === budget.detailEnemyCount, 'High-detail enemy load was not created.');
   assert(detailLoad.turrets >= budget.minStructures, 'High-detail structure load is too small: ' + detailLoad.turrets);
   await wait(700);
-  const detailRenderMode=await browser.evaluate('({dense:RENDER_DENSE,dpr:DPR,backingWidth:c.width,backingHeight:c.height})');
-  assert(!detailRenderMode.dense && detailRenderMode.dpr > budget.maxDenseDpr,
+  const detailRenderMode=await browser.evaluate('({dense:RENDER_DENSE,pressure:RENDER_PRESSURE,dpr:DPR,backingWidth:c.width,backingHeight:c.height})');
+  assert(!detailRenderMode.dense && detailRenderMode.pressure && detailRenderMode.dpr <= budget.maxDenseDpr,
     'High-detail scene unexpectedly entered dense LOD: ' + JSON.stringify(detailRenderMode));
   const detailNormal=await sample();
   assert(detailNormal.fps >= budget.normal.minFps, 'Normal high-detail FPS failed: ' + detailNormal.fps.toFixed(1));
@@ -84,7 +84,7 @@ try {
   assert(load.enemies === budget.enemyCount, 'Performance enemy load was not created.');
   assert(load.turrets >= budget.minStructures, 'Performance structure load is too small: ' + load.turrets);
   await wait(700);
-  const renderMode=await browser.evaluate('({dense:RENDER_DENSE,dpr:DPR,backingWidth:c.width,backingHeight:c.height})');
+  const renderMode=await browser.evaluate('({dense:RENDER_DENSE,pressure:RENDER_PRESSURE,dpr:DPR,backingWidth:c.width,backingHeight:c.height})');
   assert(renderMode.dense && renderMode.dpr <= budget.maxDenseDpr,
     'Dense rendering contract did not activate: ' + JSON.stringify(renderMode));
 

@@ -560,6 +560,7 @@ document.getElementById('start').onclick=startGame;
 document.getElementById('stop').onclick=stopGame;
 document.getElementById('again').onclick=startGame;
 
+GAME_READY=true;
 buildDecor(0);
 resize(); reset(); updateHUD();
 requestAnimationFrame(frame);

@@ -4,7 +4,7 @@ const ctx = cv.getContext('2d',{alpha:false,desynchronized:true});
 const REDUCE = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 const MOBILE_GPU = !!(window.matchMedia && window.matchMedia('(pointer:coarse)').matches);
 const DENSE_DPR_CAP=1.25;
-let W=0, H=0, DPR=Math.min(MOBILE_GPU?1.5:2, window.devicePixelRatio||1), RENDER_DENSE=false;
+let W=0, H=0, DPR=Math.min(MOBILE_GPU?1.5:2, window.devicePixelRatio||1), RENDER_DENSE=false, RENDER_PRESSURE=false, GAME_READY=false;
 console.info('[Wave Arena]',BUILD_ID,'canvas2d',MOBILE_GPU?'mobile':'desktop');
 
 // ---- CC0 효과음(Kenney) ----
