@@ -3,7 +3,7 @@
 회전 가능한 블록 디오라마 전장에서 아군과 포탑을 성장시키는 브라우저 웨이브 디펜스 게임입니다.
 
 - 플레이: https://seohyunbum.github.io/wave-arena/
-- 현재 빌드: 2026.08.25-adaptive-rendering
+- 현재 빌드: 2026.08.25-pwa-resilient
 - 배포: main push → GitHub Pages
 - 지원: 데스크톱 브라우저, 모바일 가로 모드, PWA 설치·오프라인 실행
 

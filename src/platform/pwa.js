@@ -1,8 +1,44 @@
 // ================= 휴대폰 앱(PWA) =================
 // 서비스 워커를 등록해 두면 홈 화면에 설치할 수 있고, 인터넷이 없어도 실행된다.
 // file:// 로 열었을 때는 등록이 불가능하므로 조용히 건너뛴다.
+async function waitForServiceWorker(registration,timeoutMs){
+  if(registration.active?.state==='activated') return registration;
+  const worker=registration.installing||registration.waiting||registration.active;
+  if(!worker) throw new Error('Service worker registration has no worker.');
+  if(worker.state==='activated') return registration;
+  await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('Service worker activation timed out.')),timeoutMs);
+    const changed=()=>{
+      if(worker.state==='activated'){ clearTimeout(timer); resolve(); }
+      else if(worker.state==='redundant'){ clearTimeout(timer); reject(new Error('Service worker became redundant.')); }
+    };
+    worker.addEventListener('statechange',changed);
+  });
+  return registration;
+}
+async function registerServiceWorker(){
+  const delays=[0,1500,4000]; let lastError=null;
+  globalThis.WA_SW_DIAGNOSTIC={status:'registering',attempt:0};
+  for(let i=0;i<delays.length;i++){
+    if(delays[i]) await new Promise(done=>setTimeout(done,delays[i]));
+    try{
+      globalThis.WA_SW_DIAGNOSTIC={status:'registering',attempt:i+1};
+      const registration=await navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'});
+      await waitForServiceWorker(registration,20000);
+      globalThis.WA_SW_DIAGNOSTIC={status:'ready',attempt:i+1};
+      return registration;
+    }catch(error){
+      lastError=error;
+      const failed=await navigator.serviceWorker.getRegistration().catch(()=>null);
+      if(failed&&!failed.active) await failed.unregister().catch(()=>{});
+    }
+  }
+  globalThis.WA_SW_DIAGNOSTIC={status:'failed',attempt:delays.length,message:lastError?.message||'unknown'};
+  console.warn('[Wave Arena] service worker install failed after retries',lastError);
+  return null;
+}
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+  window.addEventListener('load',registerServiceWorker,{once:true});
 }
 
 // ---- 앱 설치 ----
