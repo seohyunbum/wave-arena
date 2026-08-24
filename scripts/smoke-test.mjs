@@ -22,11 +22,12 @@ const browserBin = await findBrowser([
   process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe'),
   '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/usr/bin/microsoft-edge',
   '/usr/bin/google-chrome-stable',
   '/usr/bin/google-chrome',
   '/usr/bin/chromium',
+  '/usr/bin/microsoft-edge',
 ]);
+console.log('[smoke] browser', browserBin);
 
 await fetch(targetUrl, { cache: 'no-store' }).then(response => {
   if (!response.ok) throw new Error(`Game server returned ${response.status}`);
