@@ -18,7 +18,7 @@ Wave Arena는 별도 계정·서버·GPU 없이 GitHub Pages URL에서 실행되
 | src/game.js | 상태·저장·전투 시뮬레이션 core |
 | src/game/ui.js | HUD·상점·입력·게임 시작 bootstrap |
 | src/platform/pwa.js | 서비스워커, 설치 안내, wake lock, 모바일 브라우저 제약 |
-| quality-gates.json | viewport와 성능 예산의 기계 판독 정본 |
+| quality-gates.json | viewport·밸런스 밴드·성능 예산의 기계 판독 정본 |
 | scripts | 정적 검증, 브라우저 E2E, 성능 회귀 |
 | docs | 아키텍처 결정, 품질 게이트, 외부 소스 근거 |
 
@@ -39,6 +39,7 @@ Wave Arena는 별도 계정·서버·GPU 없이 GitHub Pages URL에서 실행되
 ## 성공 게이트
 
 - node scripts/verify-project.mjs
+- node scripts/balance-report.mjs --check
 - 로컬 서버에서 node scripts/smoke-test.mjs http://127.0.0.1:4173/
 - 로컬 서버에서 node scripts/perf-test.mjs http://127.0.0.1:4173/
 - quality-gates.json의 모든 viewport, flow, offline, reduced-motion, performance budget 통과

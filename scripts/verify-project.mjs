@@ -2,6 +2,7 @@ import { readFile, access } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { evaluateBalance } from './balance-report.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const read = relative => readFile(join(root, relative), 'utf8');
@@ -15,6 +16,7 @@ const claude = await read('CLAUDE.md');
 const index = await read('index.html');
 const readme = await read('README.md');
 const sw = await read('sw.js');
+const balance = await evaluateBalance(gates);
 
 assert(meta && meta.buildId && meta.cacheVersion, 'Build metadata is incomplete.');
 assert(agents === claude, 'AGENTS.md and CLAUDE.md drifted.');
@@ -34,6 +36,8 @@ assert(gates.performance.maxDenseDpr > 0 && gates.performance.maxDenseDpr < gate
   'Dense DPR cap must be lower than the performance viewport DPR.');
 assert(gates.performance.detailEnemyCount > 0 && gates.performance.detailEnemyCount < gates.performance.enemyCount,
   'High-detail performance load must stay below the dense-scene threshold.');
+assert(balance.failures.length === 0,
+  'Balance baseline failed: ' + balance.failures.join('; '));
 
 for (const asset of meta.precache) {
   if (asset === './') continue;
@@ -43,7 +47,7 @@ for (const asset of meta.precache) {
   });
 }
 
-for (const required of ['docs/ARCHITECTURE.md', 'docs/QUALITY_GATES.md', 'THIRD_PARTY_ASSETS.md']) {
+for (const required of ['docs/ARCHITECTURE.md', 'docs/QUALITY_GATES.md', 'docs/BALANCE_BASELINE.md', 'THIRD_PARTY_ASSETS.md']) {
   await access(join(root, required), constants.R_OK);
 }
 
@@ -51,6 +55,7 @@ console.log(JSON.stringify({
   buildId: meta.buildId,
   cacheVersion: meta.cacheVersion,
   precache: meta.precache.length,
+  balanceStages: balance.stages.map(stage => stage.stage),
   viewports: gates.viewports.map(viewport => viewport.name),
   flows: gates.flows
 }, null, 2));

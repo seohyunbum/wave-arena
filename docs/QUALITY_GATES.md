@@ -12,7 +12,8 @@ Canonical config: quality-gates.json
 5. PWA 계약: precache 전 항목이 존재하고, 최초 설치는 일시 실패 시 최대 3회 재시도하며, 네트워크 차단 후 재탐색해 같은 build ID가 실행된다.
 6. 시각 진화 계약: 캐릭터·기지 16단계, 일반 포탑 15단계, 전문 구조물 전 단계의 시각 서명이 중복되지 않고 6개 발사체 형상과 최대 6레이어 예산을 지킨다.
 7. 성능 계약: quality-gates.json의 정상/CPU 4배 제한 예산을 모두 통과하고 CI가 perf-result.json artifact를 보존한다.
-8. 배포 계약: main CI 통과 뒤 GitHub Pages 공개 URL에서 smoke가 다시 통과한다.
+8. 러프 밸런스 계약: 시작 화력, 적 HP 대비 보상, 무기군 성장률, 보스 체력, 방어 상한이 느슨한 밴드를 벗어나지 않는다.
+9. 배포 계약: main CI 통과 뒤 GitHub Pages 공개 URL에서 smoke가 다시 통과한다.
 
 ## Performance scene
 
@@ -26,6 +27,7 @@ CPU 제한은 실제 휴대폰 인증을 대체하지 않는다. 릴리스 후�
 
 python -m http.server 4173
 node scripts/verify-project.mjs
+node scripts/balance-report.mjs --check
 node scripts/smoke-test.mjs http://127.0.0.1:4173/
 node scripts/capture-visual-progression.mjs http://127.0.0.1:4173/
 node scripts/perf-test.mjs http://127.0.0.1:4173/

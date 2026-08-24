@@ -1,7 +1,7 @@
 (function(root){
   const meta={
-    buildId:'2026.08.25-visual-evolution-r2',
-    cacheVersion:'wave-arena-v9-visual-evolution-r2-20260825',
+    buildId:'2026.08.25-balance-baseline-r1',
+    cacheVersion:'wave-arena-v10-balance-baseline-20260825',
     precache:[
       './',
       './index.html',

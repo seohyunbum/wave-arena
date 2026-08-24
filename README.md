@@ -3,7 +3,7 @@
 회전 가능한 블록 디오라마 전장에서 아군과 포탑을 성장시키는 브라우저 웨이브 디펜스 게임입니다.
 
 - 플레이: https://seohyunbum.github.io/wave-arena/
-- 현재 빌드: 2026.08.25-visual-evolution-r2
+- 현재 빌드: 2026.08.25-balance-baseline-r1
 - 배포: main push → GitHub Pages
 - 지원: 데스크톱 브라우저, 모바일 가로 모드, PWA 설치·오프라인 실행
 
@@ -33,14 +33,15 @@ index.html은 DOM/CSS 셸이고 게임은 runtime/config/visual-system/render/co
 
 Unreal Engine은 키아트·베이크드 배경·트레일러 제작 도구로만 검토합니다. 공유 URL 조건에는 서버 GPU와 세션 인프라가 필요한 Pixel Streaming보다 정적 웹 런타임이 적합합니다.
 
-자세한 구조는 docs/ARCHITECTURE.md, 시각 진화 규격은 docs/VISUAL_PROGRESSION.md, 실행 게이트는 docs/QUALITY_GATES.md, 외부 소스는 THIRD_PARTY_ASSETS.md를 참조하십시오.
+자세한 구조는 docs/ARCHITECTURE.md, 러프 밸런스는 docs/BALANCE_BASELINE.md, 시각 진화 규격은 docs/VISUAL_PROGRESSION.md, 실행 게이트는 docs/QUALITY_GATES.md, 외부 소스는 THIRD_PARTY_ASSETS.md를 참조하십시오.
 
 ## 검증
 
 Node.js 22 이상과 Chromium 계열 브라우저가 필요합니다.
 
 node scripts/verify-project.mjs
+node scripts/balance-report.mjs --check
 node scripts/smoke-test.mjs http://127.0.0.1:4173/
 node scripts/perf-test.mjs http://127.0.0.1:4173/
 
-스모크는 4개 viewport, 시작·상점·회전·음소거, 포탑 배치·합체, 저장·복원, 끝내기, 16단계 기지·캐릭터 및 전 포탑·6종 발사체 진화 계약, reduced-motion, 전체 precache, 실제 offline 재탐색을 검사합니다. 성능 검사는 적 60마리와 최대 구조물 장면을 기본 CPU와 4배 CPU 제한에서 판정합니다. 임계값 정본은 quality-gates.json입니다.
+밸런스 검사는 시작 화력, 적 HP 대비 보상, 무기군 성장률, 보스 체력, 방어 상한의 느슨한 밴드만 판정합니다. 스모크는 4개 viewport, 시작·상점·회전·음소거, 포탑 배치·합체, 저장·복원, 끝내기, 16단계 기지·캐릭터 및 전 포탑·6종 발사체 진화 계약, reduced-motion, 전체 precache, 실제 offline 재탐색을 검사합니다. 성능 검사는 적 60마리와 최대 구조물 장면을 기본 CPU와 4배 CPU 제한에서 판정합니다. 임계값 정본은 quality-gates.json입니다.

@@ -26,6 +26,19 @@
     "projectileArchetypes": 6,
     "maxProjectileLayers": 6
   },
+  "balance": {
+    "sampleStages": [1, 5, 10, 20, 30, 50],
+    "bands": {
+      "startTeamDpsToSpawnPressure": [2.5, 4.0],
+      "killGoldPerEnemyHp": [0.14, 0.24],
+      "bossHpMultiplier": [24, 36],
+      "normalTurretDpsGrowth": [1.5, 1.82],
+      "rapidTurretDpsGrowth": [1.25, 1.42],
+      "rapidEntryValueAdvantage": [2.0, 4.0],
+      "laserValueRetention": [0.88, 1.02],
+      "maxArmorDamageCut": [0.93, 0.955]
+    }
+  },
   "performance": {
     "viewport": { "width": 844, "height": 390, "dpr": 1.5 },
     "durationMs": 4000,
