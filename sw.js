@@ -1,7 +1,7 @@
 // 웨이브 아레나 서비스 워커
 // 설치할 때 게임 파일을 통째로 받아 두어, 다음부터는 인터넷이 없어도 실행된다.
 // 게임을 고쳐서 올릴 때는 VERSION 을 올려야 새 파일이 내려간다.
-const VERSION = 'wave-arena-v2';
+const VERSION = 'wave-arena-v3-visual-20260824';
 const ASSETS = [
   './',
   './index.html',
@@ -11,7 +11,13 @@ const ASSETS = [
   './icon-192.png',
   './icon-512.png',
   './icon-maskable-512.png',
-  './icon-apple-180.png'
+  './icon-apple-180.png',
+  './assets/audio/ui-click.ogg',
+  './assets/audio/ui-confirm.ogg',
+  './assets/audio/ui-warning.ogg',
+  './assets/audio/ui-reward.ogg',
+  './assets/audio/impact-light.ogg',
+  './assets/audio/impact-heavy.ogg'
 ];
 
 self.addEventListener('install', ev => {
