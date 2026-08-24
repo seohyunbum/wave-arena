@@ -18,7 +18,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: 프로젝트 정적 계약
         run: |
           node --check sw.js
@@ -35,20 +35,33 @@ jobs:
           node --check scripts/verify-project.mjs
           node scripts/verify-project.mjs
       - name: 브라우저 기능·오프라인·성능 게이트
+        shell: bash
         run: |
+          set -Eeuo pipefail
+          mkdir -p artifacts
           python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/wave-arena-server.log 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid"' EXIT
           sleep 1
-          node scripts/smoke-test.mjs http://127.0.0.1:4173/
-          mkdir -p artifacts
-          PERF_OUTPUT=artifacts/perf-result.json node scripts/perf-test.mjs http://127.0.0.1:4173/
-      - name: 성능 추세 evidence
+          if ! node scripts/smoke-test.mjs http://127.0.0.1:4173/ 2>&1 | tee artifacts/smoke.log; then
+            detail=$(tail -c 3000 artifacts/smoke.log | tr '\n' ' ')
+            echo "::error title=Wave Arena smoke gate failed::$detail"
+            exit 1
+          fi
+          if ! PERF_OUTPUT=artifacts/perf-result.json node scripts/perf-test.mjs http://127.0.0.1:4173/ 2>&1 | tee artifacts/perf.log; then
+            detail=$(tail -c 3000 artifacts/perf.log | tr '\n' ' ')
+            echo "::error title=Wave Arena performance gate failed::$detail"
+            exit 1
+          fi
+      - name: 검증 evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: wave-arena-performance
-          path: artifacts/perf-result.json
-          if-no-files-found: error
+          name: wave-arena-verification-${{ github.run_attempt }}
+          path: |
+            artifacts/
+            /tmp/wave-arena-server.log
+          if-no-files-found: warn
 
   deploy:
     needs: verify
@@ -57,7 +70,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Pages 설정
         uses: actions/configure-pages@v5
         with:
