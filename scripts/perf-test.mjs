@@ -1,4 +1,5 @@
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { launchBrowser, metricMap, wait } from './cdp-harness.mjs';
 
 const gates = JSON.parse(await readFile(new URL('../quality-gates.json', import.meta.url), 'utf8'));
@@ -88,7 +89,10 @@ try {
   };
   const serialized=JSON.stringify(report,null,2);
   console.log(serialized);
-  if(process.env.PERF_OUTPUT) await writeFile(process.env.PERF_OUTPUT,serialized+'\n','utf8');
+  if(process.env.PERF_OUTPUT){
+    await mkdir(dirname(process.env.PERF_OUTPUT),{recursive:true});
+    await writeFile(process.env.PERF_OUTPUT,serialized+'\n','utf8');
+  }
   console.log('WAVE_ARENA_PERF_OK');
 } finally {
   await browser.close();

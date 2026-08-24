@@ -781,13 +781,16 @@ function draw(){
     else if(d.land) ring(d.land.x, d.land.y, tdef(t));
   }
 
-  // 적이 많으면 캐릭터 디테일을 낮춰 프레임 유지 (보스는 항상 선명하게)
-  // 접지 그림자는 유닛보다 먼저 그려 높이감과 가독성을 확보
-  for(const t of G.turrets) drawEntityShadow(ctx,t,'t');
-  for(const a of G.allies) if(!a.dead) drawEntityShadow(ctx,a,'a');
-  for(const e of G.enemies) drawEntityShadow(ctx,e,'e');
+  // 극한 개체 수에서는 화면상 몇 픽셀뿐인 세부 부품을 실루엣 LOD로 대체한다.
+  // 평상시에는 기존 전체 디테일을 유지하고, 60적+30구조물급에서만 프레임 예산을 우선한다.
+  const EN=G.enemies.length;
+  const SCENE_DENSE=EN>45 && G.turrets.length>=30;
+  const LOD = SCENE_DENSE ? 3 : EN>45 ? 2 : EN>22 ? 1 : 0;
 
-  const EN=G.enemies.length, LOD = EN>45 ? 2 : EN>22 ? 1 : 0;
+  // 접지 그림자는 유닛보다 먼저 그려 높이감과 가독성을 확보
+  for(const t of G.turrets) drawEntityShadow(ctx,t,'t',SCENE_DENSE);
+  for(const a of G.allies) if(!a.dead) drawEntityShadow(ctx,a,'a',SCENE_DENSE);
+  for(const e of G.enemies) drawEntityShadow(ctx,e,'e',SCENE_DENSE);
 
   // 깊이 정렬(painter's algorithm)
   const items=[];
@@ -801,7 +804,7 @@ function draw(){
   for(const it of items){
     const o=it.o;
     if(it.k==='t'){
-      drawTurret(ctx,o);
+      drawTurret(ctx,o,SCENE_DENSE?2:0);
     } else if(it.k==='a'){
       if(o.dead){ // 쓰러진 아군 = 납작한 회색 블록
         box(ctx,o.x,o.y,0,22,14,5,'#5b6478');
@@ -910,8 +913,38 @@ function drawLaser(g,t){
   const lb='Lv'+(t.tier+1)+' 레이저';
   g.strokeText(lb,sx,sy); g.fillStyle=L.top; g.fillText(lb,sx,sy);
 }
+// 극한 부하용 포탑 LOD. 작은 화면에서도 종류·방향·충전 상태는 남기고 미세 부품만 생략한다.
+function drawLaserCompact(g,t){
+  const L=tdef(t),ang=t.ang||0,ca=Math.cos(ang),sa=Math.sin(ang),hl=L.len/2;
+  const ax=t.x-ca*hl,ay=t.y-sa*hl,bx=t.x+ca*hl,by=t.y+sa*hl,z=7+L.hh*.55+3;
+  box(g,ax,ay,0,L.base*.58,L.base*.58,7+L.hh,L.col);
+  box(g,bx,by,0,L.base*.58,L.base*.58,7+L.hh,L.col);
+  const x1=isoX(ax,ay),y1=isoY(ax,ay,z),x2=isoX(bx,by),y2=isoY(bx,by,z);
+  g.save(); g.lineCap='round'; g.strokeStyle=L.top;
+  g.globalAlpha=.34; g.lineWidth=Math.max(4,L.width*.78*ISO_Y*1.42*CAM.scale);
+  g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+  g.globalAlpha=.95; g.strokeStyle='#ffffff'; g.lineWidth=Math.max(1.5,L.width*.2*ISO_Y*1.42*CAM.scale);
+  g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke(); g.restore();
+}
+function drawTurretCompact(g,t){
+  if(isLaser(t)){ drawLaserCompact(g,t); return; }
+  const T=tdef(t),ang=t.aim||0,ca=Math.cos(ang),sa=Math.sin(ang);
+  const baseH=8+t.tier*.8,bodyH=Math.max(12,T.hh*.82),headZ=baseH+bodyH;
+  box(g,t.x,t.y,0,T.base,T.base,baseH,'#6b7280');
+  box(g,t.x,t.y,baseH,T.body*.9,T.body*.9,bodyH,T.col);
+  rbox(g,t.x,t.y,headZ,T.base*.64,T.base*.58,10+t.tier*1.2,ang,T.top);
+  const barrelLen=Math.max(12,T.bl||T.len*.3),forward=T.base*.18+barrelLen*.5;
+  const bx=t.x+ca*forward,by=t.y+sa*forward,bz=headZ+3;
+  rbox(g,bx,by,bz,barrelLen,Math.max(3,T.bw||T.width*.28),Math.max(3,T.bw||T.width*.28),ang,isLauncher(t)&&t.coilT>0?'#7cf3ff':'#3f4b5f');
+  if(isRapid(t)){
+    const off=Math.max(3,(T.bw||4)*1.25),x=t.x+ca*forward-sa*off,y=t.y+sa*forward+ca*off;
+    rbox(g,x,y,bz,barrelLen,Math.max(2.5,T.bw*.75),Math.max(2.5,T.bw*.75),ang,'#c2b45a');
+  }
+  if(isLauncher(t)&&t.coilT>0) box(g,t.x,t.y,baseH+bodyH*.45,13,13,7,'#9df3ff');
+}
 // ---- 포탑 그리기 : 등급마다 크기·모양이 다르고, 총구가 적을 향해 돌아감 ----
-function drawTurret(g,t){
+function drawTurret(g,t,lod){
+  if(lod>=2){ drawTurretCompact(g,t); return; }
   if(isLaser(t)){ drawLaser(g,t); return; }
   const T=tdef(t), sel=(G.selTurret===t);
   const ang=t.aim||0, ca=Math.cos(ang), sa=Math.sin(ang);
