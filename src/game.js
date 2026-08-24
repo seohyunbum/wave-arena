@@ -879,7 +879,9 @@ function draw(){
   const EN=G.enemies.length;
   const SCENE_DENSE=EN>45 && G.turrets.length>=30;
   const SCENE_DETAIL_PRESSURE=!SCENE_DENSE && EN>=18 && G.turrets.length>=28;
-  if(RENDER_DENSE!==SCENE_DENSE){ RENDER_DENSE=SCENE_DENSE; resize(); }
+  if(RENDER_DENSE!==SCENE_DENSE||RENDER_PRESSURE!==SCENE_DETAIL_PRESSURE){
+    RENDER_DENSE=SCENE_DENSE; RENDER_PRESSURE=SCENE_DETAIL_PRESSURE; resize();
+  }
   if(backdrop) ctx.drawImage(backdrop,0,0,W,H);
   const shake=REDUCE?0:G.shake, sx=shake?(Math.random()*2-1)*shake:0, sy=shake?(Math.random()*2-1)*shake*.65:0;
   ctx.save(); ctx.translate(sx,sy);
@@ -904,13 +906,13 @@ function draw(){
 
   // 극한 개체 수에서는 화면상 몇 픽셀뿐인 세부 부품을 실루엣 LOD로 대체한다.
   // 평상시에는 기존 전체 디테일을 유지하고, 60적+30구조물급에서만 프레임 예산을 우선한다.
-  const LOD = SCENE_DENSE ? 3 : SCENE_DETAIL_PRESSURE ? 1 : EN>45 ? 2 : EN>22 ? 1 : 0;
+  const LOD = (SCENE_DENSE||SCENE_DETAIL_PRESSURE) ? 3 : EN>45 ? 2 : EN>22 ? 1 : 0;
   const allyVisual=allyVisualSpec(G.upTotal,G.weaponTier,G.armorTier);
 
   // 접지 그림자는 유닛보다 먼저 그려 높이감과 가독성을 확보
-  for(const t of G.turrets) drawEntityShadow(ctx,t,'t',SCENE_DENSE);
-  for(const a of G.allies) if(!a.dead) drawEntityShadow(ctx,a,'a',SCENE_DENSE);
-  for(const e of G.enemies) drawEntityShadow(ctx,e,'e',SCENE_DENSE);
+  for(const t of G.turrets) drawEntityShadow(ctx,t,'t',SCENE_DENSE||SCENE_DETAIL_PRESSURE);
+  for(const a of G.allies) if(!a.dead) drawEntityShadow(ctx,a,'a',SCENE_DENSE||SCENE_DETAIL_PRESSURE);
+  for(const e of G.enemies) drawEntityShadow(ctx,e,'e',SCENE_DENSE||SCENE_DETAIL_PRESSURE);
 
   // 깊이 정렬(painter's algorithm)
   const items=[],base=baseNode();
@@ -925,9 +927,9 @@ function draw(){
   for(const it of items){
     const o=it.o;
     if(it.k==='b'){
-      drawBaseFortress(ctx,SCENE_DENSE);
+      drawBaseFortress(ctx,SCENE_DENSE||SCENE_DETAIL_PRESSURE);
     } else if(it.k==='t'){
-      drawTurret(ctx,o,SCENE_DENSE?2:(SCENE_DETAIL_PRESSURE?1:0));
+      drawTurret(ctx,o,(SCENE_DENSE||SCENE_DETAIL_PRESSURE)?2:0);
     } else if(it.k==='a'){
       if(o.dead){ // 쓰러진 아군 = 납작한 회색 블록
         box(ctx,o.x,o.y,0,22,14,5,'#5b6478');
@@ -941,7 +943,7 @@ function draw(){
       const top=character(ctx,o.x,o.y,s,C,o.phase,o.freezeT<=0,o.face||0,o.atkPose>0?1:0,o.isBoss?0:LOD,visual);
       if(o.isBoss||o.hp<o.maxHp) hpBar(o.x,o.y,top+8,o.hp/o.maxHp, o.isBoss?'#ff3b6b':'#ff8a97');
     } else if(it.k==='p'){
-      drawProjectile(ctx,o,SCENE_DENSE||(o.visual&&o.visual.kind==='rapid'&&G.shots.length>90));
+      drawProjectile(ctx,o,SCENE_DENSE||SCENE_DETAIL_PRESSURE||(o.visual&&o.visual.kind==='rapid'&&G.shots.length>90));
     } else {
       const al=Math.max(0,1-o.t/o.life),sx0=isoX(o.x,o.y),sy0=isoY(o.x,o.y,o.z);
       ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=al;
@@ -953,7 +955,7 @@ function draw(){
   drawRings(ctx);
 
   // 에너지 빔 (등급이 오를수록 외곽 레일·에너지 노드가 추가됨)
-  for(const bm of G.beams) drawAnnihilationBeam(ctx,bm,SCENE_DENSE);
+  for(const bm of G.beams) drawAnnihilationBeam(ctx,bm,SCENE_DENSE||SCENE_DETAIL_PRESSURE);
 
   // 데미지 숫자 (화면공간)
   ctx.textAlign='center';
