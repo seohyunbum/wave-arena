@@ -1,7 +1,7 @@
 # Wave Arena Architecture
 
 Status: accepted
-Last reviewed: 2026-08-24
+Last reviewed: 2026-08-25
 
 ## Product constraints
 
@@ -35,6 +35,7 @@ CFG는 밸런스 정본이고 G는 런타임 상태다. entity는 상속 계층 
 - 동적 entity는 painter sort한다.
 - 모바일 DPR은 1.5로 제한한다.
 - 적 22/45에서 캐릭터 LOD를 낮춘다.
+- 적 45 초과와 구조물 30개 이상이 겹치는 극한 장면에서는 캐릭터와 포탑을 실루엣 LOD로 전환한다. 종류·방향·충전 상태는 보존하며 평상시 렌더에는 적용하지 않는다.
 - 적 60, 파티클 260, ring 80 상한을 둔다.
 - HUD는 최대 10Hz로 갱신하고 상점 DOM은 상태 변경 시에만 다시 계산한다.
 
@@ -44,6 +45,7 @@ ADR-001: Canvas 2D 유지. 정적 URL과 모바일 독립 실행 비용이 Pixi/
 ADR-002: Data-oriented entities 유지. OOP는 클래스 개수가 아니라 책임·의존 경계로 평가한다.
 ADR-003: Build metadata와 precache를 한 파일에서 관리한다.
 ADR-004: 문서 품질 게이트는 quality-gates.json과 scripts에서 실행되지 않으면 gate로 인정하지 않는다.
+ADR-005: 고밀도 LOD는 작은 화면에서 식별되지 않는 미세 부품만 줄이고 실루엣·종류·방향·상태 신호를 보존한다.
 
 ## Change rules
 

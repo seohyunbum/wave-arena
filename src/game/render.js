@@ -287,9 +287,21 @@ const ENEMY_SKIN='#c9705f', ENEMY_TORSO='#8b1a2b', ENEMY_LEG='#341018',
       ENEMY_HAIR='#2a0d14', ENEMY_SHOE='#1a0509', ENEMY_BELT='#6b1020';
 const EYE_COL='#141a24';
 // 사람 1명 그리기. 로컬 좌표 : +x=앞(바라보는 방향), +y=왼쪽, z=위
-// lod = 디테일 단계 (0=전체, 1=얼굴/손 생략, 2=최소) — 적이 많을 때 자동으로 올려 프레임 유지
+// lod = 디테일 단계 (0=전체, 1=얼굴/손 생략, 2=최소, 3=극한 부하용 실루엣)
+function characterCompact(g,x,y,s,C,phase,moving,face){
+  const bob=moving&&!REDUCE?Math.abs(Math.sin(phase))*1.3*s:0;
+  const ca=Math.cos(face),sa=Math.sin(face), side=(offset)=>({x:x-sa*offset*s,y:y+ca*offset*s});
+  const left=side(3.7),right=side(-3.7);
+  rbox(g,left.x,left.y,3.5*s,6.5*s,6.5*s,16*s,face,C.leg);
+  rbox(g,right.x,right.y,3.5*s,6.5*s,6.5*s,16*s,face,C.leg);
+  rbox(g,x,y,(22+bob)*s,9*s,18*s,18*s,face,C.torso);
+  rbox(g,x,y,(42+bob)*s,10.5*s,11.5*s,11*s,face,C.skin);
+  rbox(g,x,y,(52.5+bob)*s,11.2*s,12.2*s,3.2*s,face,C.hair);
+  return 56*s+bob;
+}
 function character(g,x,y,s,C,phase,moving,face,pose,lod){
   lod=lod||0;
+  if(lod>=3) return characterCompact(g,x,y,s,C,phase,moving,face);
   const anim = moving && !REDUCE;
   const sw   = anim ? Math.sin(phase) : 0;                 // 팔다리 스윙
   const bob  = anim ? Math.abs(Math.sin(phase))*1.3*s : 0; // 상하 흔들림
@@ -424,11 +436,11 @@ function drawDecorShadows(g){
     screenEllipse(g,d.x+9,d.y+9,0,r,r*.78,'rgba(4,16,15,.24)');
   }
 }
-function drawEntityShadow(g,o,kind){
+function drawEntityShadow(g,o,kind,compact){
   const r=kind==='t' ? Math.max(16,tdef(o).base*.55) : kind==='e' ? o.r*1.35 : 18;
   const a=(kind==='e'&&o.isBoss) ? .34 : .22;
   screenEllipse(g,o.x+7,o.y+8,0,r,r*.72,'rgba(1,8,13,'+a+')');
-  screenEllipse(g,o.x+3,o.y+4,0,r*.62,r*.42,'rgba(1,5,10,.18)');
+  if(!compact) screenEllipse(g,o.x+3,o.y+4,0,r*.62,r*.42,'rgba(1,5,10,.18)');
 }
 function drawWorldAtmosphere(g){
   g.save(); g.globalCompositeOperation='lighter';

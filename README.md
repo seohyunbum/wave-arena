@@ -3,7 +3,7 @@
 회전 가능한 블록 디오라마 전장에서 아군과 포탑을 성장시키는 브라우저 웨이브 디펜스 게임입니다.
 
 - 플레이: https://seohyunbum.github.io/wave-arena/
-- 현재 빌드: 2026.08.24-engineering-hardening
+- 현재 빌드: 2026.08.25-performance-hardening
 - 배포: main push → GitHub Pages
 - 지원: 데스크톱 브라우저, 모바일 가로 모드, PWA 설치·오프라인 실행
 
@@ -29,7 +29,7 @@ python -m http.server 4173
 
 index.html은 DOM/CSS 셸이고 게임은 runtime/config/render/core/ui로 분리했고 설치·모바일 플랫폼 처리는 src/platform/pwa.js가 담당합니다. build ID, 서비스워커 cache version, precache 목록은 src/build-meta.js가 단일 정본입니다.
 
-게임 로직은 data-oriented JavaScript, 그래픽은 HiDPI Canvas 2D입니다. 정적 지형·배경·후처리는 캐시하고 동적 유닛·탄도·충격파만 매 프레임 합성합니다. 모바일은 DPR을 1.5로 제한하고 적 수에 따라 캐릭터 디테일과 파티클을 자동 축소합니다.
+게임 로직은 data-oriented JavaScript, 그래픽은 HiDPI Canvas 2D입니다. 정적 지형·배경·후처리는 캐시하고 동적 유닛·탄도·충격파만 매 프레임 합성합니다. 모바일은 DPR을 1.5로 제한하고 적 수에 따라 캐릭터 디테일과 파티클을 자동 축소합니다. 적 60마리와 구조물 30개 이상이 동시에 표시되는 극한 장면에서는 화면상 수 픽셀인 부품만 종류·방향·상태가 유지되는 실루엣 LOD로 전환합니다.
 
 Unreal Engine은 키아트·베이크드 배경·트레일러 제작 도구로만 검토합니다. 공유 URL 조건에는 서버 GPU와 세션 인프라가 필요한 Pixel Streaming보다 정적 웹 런타임이 적합합니다.
 
