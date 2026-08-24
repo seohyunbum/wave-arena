@@ -1,6 +1,3 @@
-# main 에 올라갈 때마다 게임을 GitHub Pages 에 배포한다.
-# configure-pages 의 enablement:true 가 Pages 가 꺼져 있으면 자동으로 켜 준다.
-# 휴대폰에 앱으로 설치하려면 https 주소가 필요한데, Pages 가 https 를 준다.
 name: Deploy to GitHub Pages
 
 on:
@@ -18,28 +15,54 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 프로젝트 정적 계약
+        run: |
+          node --check sw.js
+          node --check src/build-meta.js
+          node --check src/game/runtime.js
+          node --check src/game/config.js
+          node --check src/game/render.js
+          node --check src/game.js
+          node --check src/game/ui.js
+          node --check src/platform/pwa.js
+          node --check scripts/cdp-harness.mjs
+          node --check scripts/smoke-test.mjs
+          node --check scripts/perf-test.mjs
+          node --check scripts/verify-project.mjs
+          node scripts/verify-project.mjs
+      - name: 브라우저 기능·오프라인·성능 게이트
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/wave-arena-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          sleep 1
+          node scripts/smoke-test.mjs http://127.0.0.1:4173/
+          mkdir -p artifacts
+          PERF_OUTPUT=artifacts/perf-result.json node scripts/perf-test.mjs http://127.0.0.1:4173/
+      - name: 성능 추세 evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: wave-arena-performance
+          path: artifacts/perf-result.json
+          if-no-files-found: error
+
   deploy:
+    needs: verify
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: 모바일·PWA 회귀 검증
-        run: |
-          node --check sw.js
-          node --check scripts/smoke-test.mjs
-          node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8'))"
-          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/wave-arena-server.log 2>&1 &
-          server_pid=$!
-          trap 'kill "$server_pid"' EXIT
-          sleep 1
-          node scripts/smoke-test.mjs http://127.0.0.1:4173/
-      - name: Pages 설정 (꺼져 있으면 켠다)
+      - name: Pages 설정
         uses: actions/configure-pages@v5
         with:
           enablement: true
-      - name: 저장소 전체를 그대로 업로드 (빌드 과정이 없는 단일 HTML 게임)
+      - name: 검증된 정적 게임 업로드
         uses: actions/upload-pages-artifact@v3
         with:
           path: .

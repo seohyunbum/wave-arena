@@ -1,72 +1,52 @@
 // 웨이브 아레나 서비스 워커
-// 설치할 때 게임 파일을 통째로 받아 두어, 다음부터는 인터넷이 없어도 실행된다.
-// 게임을 고쳐서 올릴 때는 VERSION 을 올려야 새 파일이 내려간다.
-const VERSION = 'wave-arena-v3-visual-20260824';
-const ASSETS = [
-  './',
-  './index.html',
-  './studio-ident.js',
-  './manifest.webmanifest',
-  './icon.ico',
-  './icon-192.png',
-  './icon-512.png',
-  './icon-maskable-512.png',
-  './icon-apple-180.png',
-  './assets/audio/ui-click.ogg',
-  './assets/audio/ui-confirm.ogg',
-  './assets/audio/ui-warning.ogg',
-  './assets/audio/ui-reward.ogg',
-  './assets/audio/impact-light.ogg',
-  './assets/audio/impact-heavy.ogg'
-];
+// build ID, cache version, precache 목록은 src/build-meta.js가 단일 정본이다.
+importScripts('./src/build-meta.js');
 
-self.addEventListener('install', ev => {
-  // 일부 파일이 없어도 설치가 통째로 실패하지 않도록 하나씩 담는다
-  ev.waitUntil((async () => {
-    const c = await caches.open(VERSION);
-    await Promise.all(ASSETS.map(u => c.add(u).catch(() => {})));
+const VERSION = WA_BUILD_META.cacheVersion;
+const ASSETS = WA_BUILD_META.precache;
+
+self.addEventListener('install', event => {
+  event.waitUntil((async () => {
+    const cache = await caches.open(VERSION);
+    // core asset 하나라도 없으면 설치를 실패시켜 오프라인 false-green을 막는다.
+    await cache.addAll(ASSETS);
     self.skipWaiting();
   })());
 });
 
-self.addEventListener('activate', ev => {
-  ev.waitUntil((async () => {
+self.addEventListener('activate', event => {
+  event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)));
+    await Promise.all(keys.filter(key => key !== VERSION).map(key => caches.delete(key)));
     await self.clients.claim();
   })());
 });
 
-// 게임 본체(HTML/JS)는 "새 것 먼저, 안 되면 저장본" — 게임을 고쳐 올리면 바로 반영된다.
-//   (저장본 우선으로 하면 앱을 설치한 뒤로는 영영 옛날 버전만 나온다)
-// 아이콘 같은 안 변하는 파일은 "저장본 먼저" — 빠르고 데이터도 아낀다.
-// 어느 쪽이든 인터넷이 없으면 저장본으로 실행되므로 비행기 모드에서도 켜진다.
 const FRESH_FIRST = /\.(html|js|webmanifest)$|\/$/i;
 
-self.addEventListener('fetch', ev => {
-  const req = ev.request;
-  if (req.method !== 'GET') return;
-  const url = new URL(req.url);
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+  const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  const freshFirst = req.mode === 'navigate' || FRESH_FIRST.test(url.pathname);
-
-  ev.respondWith((async () => {
-    const put = res => {
-      if (res && res.ok) caches.open(VERSION).then(c => c.put(req, res.clone()));
-      return res;
+  const freshFirst = request.mode === 'navigate' || FRESH_FIRST.test(url.pathname);
+  event.respondWith((async () => {
+    const put = response => {
+      if (response && response.ok) caches.open(VERSION).then(cache => cache.put(request, response.clone()));
+      return response;
     };
     if (freshFirst) {
       try {
-        const res = await fetch(req);
-        if (res && res.ok) return put(res);
-      } catch (e) { /* 오프라인 → 아래 저장본으로 */ }
-      return (await caches.match(req, { ignoreSearch: true }))
-          || (await caches.match('./index.html'))
-          || Response.error();
+        const response = await fetch(request);
+        if (response && response.ok) return put(response);
+      } catch {}
+      return (await caches.match(request, { ignoreSearch: true }))
+        || (await caches.match('./index.html'))
+        || Response.error();
     }
-    const cached = await caches.match(req, { ignoreSearch: true });
+    const cached = await caches.match(request, { ignoreSearch: true });
     if (cached) return cached;
-    try { return put(await fetch(req)); } catch (e) { return Response.error(); }
+    try { return put(await fetch(request)); } catch { return Response.error(); }
   })());
 });

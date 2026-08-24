@@ -1,220 +1,177 @@
-import { spawn } from 'node:child_process';
-import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
-import { constants } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { launchBrowser, wait } from './cdp-harness.mjs';
 
+const gates = JSON.parse(await readFile(new URL('../quality-gates.json', import.meta.url), 'utf8'));
 const targetUrl = new URL(process.argv[2] || 'http://127.0.0.1:4173/').href;
-const expectedBuild = '2026.08.24-visual-overhaul';
-const wait = ms => new Promise(done => setTimeout(done, ms));
-
-async function findBrowser(candidates) {
-  for (const candidate of candidates.filter(Boolean)) {
-    try { await access(candidate, constants.X_OK); return candidate; } catch {}
-  }
-  throw new Error('Chromium browser not found. Set BROWSER_BIN.');
-}
-
-const browserBin = await findBrowser([
-  process.env.BROWSER_BIN,
-  process.env['PROGRAMFILES(X86)'] && join(process.env['PROGRAMFILES(X86)'], 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-  process.env.PROGRAMFILES && join(process.env.PROGRAMFILES, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
-  process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe'),
-  '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/usr/bin/google-chrome-stable',
-  '/usr/bin/google-chrome',
-  '/usr/bin/chromium',
-  '/usr/bin/microsoft-edge',
-]);
-console.log('[smoke] browser', browserBin);
-
-await fetch(targetUrl, { cache: 'no-store' }).then(response => {
-  if (!response.ok) throw new Error(`Game server returned ${response.status}`);
-});
-
-const profile = await mkdtemp(join(tmpdir(), 'wave-arena-smoke-'));
-const browser = spawn(browserBin, [
-  '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage',
-  '--no-first-run', '--no-default-browser-check',
-  '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
-  '--remote-allow-origins=*',
-  `--user-data-dir=${profile}`,
-  '--window-size=844,390', targetUrl,
-], { stdio: ['ignore', 'ignore', 'pipe'] });
-
-let browserError = '';
-browser.stderr.on('data', chunk => { browserError = (browserError + chunk).slice(-4000); });
-let socket;
-const pending = new Map(), exceptions = [], errorLogs = [];
-let nextId = 0;
-const watchdog = setTimeout(() => {
-  console.error('SMOKE_TIMEOUT after 45 seconds');
-  try {
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ id: 999999, method: 'Browser.close' }));
-    }
-  } catch {}
-  browser.kill();
-  process.exit(2);
-}, 45000);
-const send = (method, params = {}) => new Promise((resolveSend, rejectSend) => {
-  const id = ++nextId;
-  const timer = setTimeout(() => {
-    pending.delete(id);
-    rejectSend(new Error(`CDP timeout: ${method}`));
-  }, 10000);
-  pending.set(id, { resolveSend, rejectSend, timer });
-  socket.send(JSON.stringify({ id, method, params }));
-});
-const evaluate = async (expression, awaitPromise = false) => {
-  const response = await send('Runtime.evaluate', {
-    expression, awaitPromise, returnByValue: true, userGesture: true,
-  });
-  if (response.exceptionDetails) {
-    throw new Error(response.exceptionDetails.exception?.description || response.exceptionDetails.text);
-  }
-  return response.result.value;
-};
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 
+await fetch(targetUrl, { cache: 'no-store' }).then(response => {
+  if (!response.ok) throw new Error('Game server returned ' + response.status);
+});
+
+const browser = await launchBrowser(targetUrl, gates.viewports[2]);
+console.log('[smoke] browser', browser.browserBin);
+const watchdog = setTimeout(() => {
+  console.error('SMOKE_TIMEOUT after 60 seconds');
+  process.exitCode = 2;
+}, 60000);
+
 try {
-  let targets, port;
-  for (let attempt = 0; attempt < 100; attempt++) {
-    try {
-      if (!port) {
-        const activePort = await readFile(join(profile, 'DevToolsActivePort'), 'utf8');
-        port = Number(activePort.split(/\r?\n/, 1)[0]);
-      }
-      if (port) {
-        const response = await fetch(`http://127.0.0.1:${port}/json/list`);
-        if (response.ok) {
-          targets = await response.json();
-          if (targets.some(target => target.type === 'page')) break;
-        }
-      }
-    } catch {}
-    await wait(100);
-  }
-  const page = targets?.find(target => target.type === 'page');
-  if (!page) throw new Error(
-    `Browser DevTools target did not start. ${browserError.trim()}`);
-
-  socket = new WebSocket(page.webSocketDebuggerUrl);
-  await new Promise((open, fail) => {
-    socket.addEventListener('open', open, { once: true });
-    socket.addEventListener('error', fail, { once: true });
-  });
-  socket.addEventListener('message', event => {
-    const message = JSON.parse(event.data);
-    if (message.id) {
-      const task = pending.get(message.id);
-      if (!task) return;
-      pending.delete(message.id); clearTimeout(task.timer);
-      message.error ? task.rejectSend(new Error(message.error.message)) : task.resolveSend(message.result);
-    } else if (message.method === 'Runtime.exceptionThrown') {
-      exceptions.push(message.params.exceptionDetails.text);
-    } else if (message.method === 'Log.entryAdded' && message.params.entry.level === 'error') {
-      errorLogs.push(message.params.entry.text);
-    }
-  });
-
-  console.log('[smoke] devtools-connected');
-  await send('Runtime.enable'); await send('Log.enable'); await send('Page.enable');
-  await send('Emulation.setDeviceMetricsOverride', {
-    width: 844, height: 390, deviceScaleFactor: 1.5, mobile: true,
-    screenWidth: 844, screenHeight: 390,
-  });
-  await send('Page.navigate', { url: targetUrl });
+  await browser.send('Page.navigate', { url: targetUrl });
   await wait(1300);
-  console.log('[smoke] page-ready');
 
-  const initial = await evaluate(`({
-    build: BUILD_ID, phase: G.phase,
-    canvas: { width: c.width, height: c.height, cssWidth: c.clientWidth, cssHeight: c.clientHeight },
-    audioFiles: Object.values(SFX_FILES)
-  })`);
-  const started = await evaluate(`(() => {
-    document.getElementById('start').click();
-    return { phase: G.phase, time: G.time };
-  })()`);
+  const viewportResults = [];
+  for (const viewport of gates.viewports) {
+    await browser.setViewport(viewport);
+    await wait(120);
+    const result = await browser.evaluate('(() => {' +
+      'resize();' +
+      'const controls=' + JSON.stringify(gates.requiredControls) + '.map(id=>{' +
+        'const el=document.getElementById(id); const r=el&&el.getBoundingClientRect();' +
+        'return {id,display:!!el&&getComputedStyle(el).display!=="none",width:r?r.width:0,height:r?r.height:0};' +
+      '});' +
+      'return {canvas:{width:c.width,height:c.height,cssWidth:c.clientWidth,cssHeight:c.clientHeight},controls};' +
+    '})()');
+    assert(result.canvas.width > 0 && result.canvas.height > 0, viewport.name + ': canvas backing store missing.');
+    assert(result.canvas.cssWidth >= viewport.width - 2, viewport.name + ': canvas width mismatch.');
+    assert(result.canvas.cssHeight > 250, viewport.name + ': canvas height too small.');
+    assert(result.controls.every(control => control.display && control.width > 0 && control.height > 0),
+      viewport.name + ': a required control is not rendered.');
+    viewportResults.push({ name: viewport.name, canvas: result.canvas });
+  }
+
+  await browser.setViewport(gates.viewports[2]);
+  await wait(150);
+  const initial = await browser.evaluate('({' +
+    'build:BUILD_ID,meta:WA_BUILD_META,phase:G.phase,reduce:REDUCE,' +
+    'canvas:{width:c.width,height:c.height,cssWidth:c.clientWidth,cssHeight:c.clientHeight}' +
+  '})');
+
+  const started = await browser.evaluate('(() => {' +
+    'document.getElementById("start").click(); return {phase:G.phase,time:G.time};' +
+  '})()');
   await wait(2200);
-  const running = await evaluate(`({ phase: G.phase, time: G.time, enemies: G.enemies.length, allies: G.allies.length })`);
-  console.log('[smoke] wave-running');
-  const shop = await evaluate(`(() => {
-    document.getElementById('shopBtn').click();
-    const opened = G.shopOpen && getComputedStyle(document.getElementById('shop')).display !== 'none';
-    document.getElementById('shopClose').click();
-    return { opened, closed: !G.shopOpen && getComputedStyle(document.getElementById('shop')).display === 'none' };
-  })()`);
-  const rotation = await evaluate(`(() => {
-    const before = CAM.rot; document.getElementById('rotBtn').click();
-    return { before, after: CAM.rot };
-  })()`);
-  const audio = await evaluate(`(() => {
-    document.getElementById('audioBtn').click();
-    return {
-      stored: localStorage.getItem('wavearena_muted_v1'),
-      label: document.getElementById('audioBtn').getAttribute('aria-label')
-    };
-  })()`);
-  const assets = await evaluate(`Promise.all(Object.values(SFX_FILES).map(async url => {
-    const response = await fetch(url);
-    return { url, status: response.status, type: response.headers.get('content-type') };
-  }))`, true);
-  const pwa = await evaluate(`Promise.race([
-    navigator.serviceWorker.ready.then(async registration => {
-      await new Promise(done => setTimeout(done, 300));
-      return {
-        active: Boolean(registration.active),
-        script: registration.active?.scriptURL || '',
-        caches: await caches.keys()
-      };
-    }),
-    new Promise(done => setTimeout(() => done({ active: false, script: '', caches: [] }), 5000))
-  ])`, true);
-  console.log('[smoke] interactions-and-pwa-ready');
+  const running = await browser.evaluate('({phase:G.phase,time:G.time,enemies:G.enemies.length,allies:G.allies.length})');
 
-  assert(initial.build === expectedBuild, `Unexpected build: ${initial.build}`);
-  assert(initial.phase === 'idle', `Initial phase is ${initial.phase}`);
-  assert(initial.canvas.width > 0 && initial.canvas.height > 0, 'Canvas has no backing resolution.');
-  assert(initial.canvas.cssWidth >= 800 && initial.canvas.cssHeight >= 300,
-    `Mobile canvas is undersized: ${initial.canvas.cssWidth}x${initial.canvas.cssHeight}`);
+  const shop = await browser.evaluate('(() => {' +
+    'document.getElementById("shopBtn").click();' +
+    'const opened=G.shopOpen&&getComputedStyle(document.getElementById("shop")).display!=="none";' +
+    'document.getElementById("shopClose").click();' +
+    'return {opened,closed:!G.shopOpen&&getComputedStyle(document.getElementById("shop")).display==="none"};' +
+  '})()');
+
+  const rotation = await browser.evaluate('(() => {' +
+    'const before=CAM.rot; document.getElementById("rotBtn").click(); return {before,after:CAM.rot};' +
+  '})()');
+
+  const audio = await browser.evaluate('(() => {' +
+    'document.getElementById("audioBtn").click();' +
+    'return {stored:localStorage.getItem("wavearena_muted_v1"),label:document.getElementById("audioBtn").getAttribute("aria-label")};' +
+  '})()');
+
+  const gameplay = await browser.evaluate('(() => {' +
+    'G.phase="paused"; G.gold=1e12; G.turrets.length=0;' +
+    'buyTurret(0); buyTurret(0);' +
+    'const before=G.turrets.length,first=G.turrets[0],second=G.turrets[1];' +
+    'const oldX=first.x,oldY=first.y; const moved=moveTurret(first,oldX+120,oldY+80);' +
+    'const merged=mergeTurrets(first,second);' +
+    'G.time=42.5; G.gold=123456; const saved=saveGame();' +
+    'G.time=1; G.gold=1; const restored=restore(loadSaved());' +
+    'const restoredState={time:G.time,gold:G.gold,turrets:G.turrets.length,tier:G.turrets[0]&&G.turrets[0].tier};' +
+    'G.phase="running"; G.stopCd=0; spawnEnemy(); stopGame(); updateHUD(true);' +
+    'return {before,moved,merged,saved,restored,restoredState,stopped:G.phase==="paused"&&G.enemies.length===0&&G.stopCd===CFG.stopCooldown};' +
+  '})()');
+
+  const assets = await browser.evaluate('Promise.all(Object.values(SFX_FILES).map(async url=>{' +
+    'const response=await fetch(url); return {url,status:response.status,type:response.headers.get("content-type")};' +
+  '}))', true);
+
+  let pwa = await browser.evaluate('Promise.race([' +
+    'navigator.serviceWorker.ready.then(async registration=>{' +
+      'await new Promise(done=>setTimeout(done,300));' +
+      'const cache=await caches.open(WA_BUILD_META.cacheVersion); const requests=await cache.keys();' +
+      'return {active:Boolean(registration.active),controller:Boolean(navigator.serviceWorker.controller),' +
+        'script:registration.active&&registration.active.scriptURL||"",cache:WA_BUILD_META.cacheVersion,' +
+        'cached:requests.map(request=>request.url),expected:WA_BUILD_META.precache.map(path=>new URL(path,location.href).href)};' +
+    '}),' +
+    'new Promise(done=>setTimeout(()=>done({active:false,controller:false,cached:[],expected:[]}),5000))' +
+  '])', true);
+
+  if (!pwa.controller) {
+    await browser.send('Page.reload', { ignoreCache: true });
+    await wait(1000);
+    pwa = await browser.evaluate('navigator.serviceWorker.ready.then(async registration=>{' +
+      'const cache=await caches.open(WA_BUILD_META.cacheVersion); const requests=await cache.keys();' +
+      'return {active:Boolean(registration.active),controller:Boolean(navigator.serviceWorker.controller),' +
+        'script:registration.active&&registration.active.scriptURL||"",cache:WA_BUILD_META.cacheVersion,' +
+        'cached:requests.map(request=>request.url),expected:WA_BUILD_META.precache.map(path=>new URL(path,location.href).href)};' +
+    '})', true);
+  }
+
+  assert(initial.build === initial.meta.buildId, 'Runtime build differs from canonical metadata.');
+  assert(initial.phase === 'idle', 'Initial phase is ' + initial.phase);
   assert(started.phase === 'running' && running.phase === 'running', 'Wave did not enter running state.');
   assert(running.time > 1 && running.enemies > 0, 'Wave did not advance or spawn enemies.');
   assert(shop.opened && shop.closed, 'Shop open/close flow failed.');
   assert(Math.abs(rotation.after - rotation.before - Math.PI / 2) < 0.001, 'Camera did not rotate 90 degrees.');
   assert(audio.stored === '1' && audio.label === '효과음 켜기', 'Mute persistence or label failed.');
+  assert(gameplay.before === 2 && gameplay.moved && gameplay.merged, 'Turret placement or merge failed.');
+  assert(gameplay.saved && gameplay.restored && gameplay.restoredState.time === 42.5 &&
+    gameplay.restoredState.gold === 123456 && gameplay.restoredState.turrets === 1 &&
+    gameplay.restoredState.tier === 1, 'Save/restore contract failed.');
+  assert(gameplay.stopped, 'Stop flow failed.');
   assert(assets.length === 6 && assets.every(asset => asset.status === 200), 'A CC0 audio file failed.');
-  assert(pwa.active && pwa.script.endsWith('/sw.js'), 'Service worker did not activate.');
-  assert(pwa.caches.includes('wave-arena-v3-visual-20260824'), 'Visual build cache was not created.');
-  assert(exceptions.length === 0, `Runtime exceptions: ${exceptions.join(' | ')}`);
-  assert(errorLogs.length === 0, `Browser errors: ${errorLogs.join(' | ')}`);
+  assert(pwa.active && pwa.controller && pwa.script.endsWith('/sw.js'), 'Service worker did not control the page.');
+  assert(pwa.cache === initial.meta.cacheVersion, 'Service worker cache version drifted.');
+  assert(pwa.expected.every(url => pwa.cached.includes(url)), 'A canonical precache asset is missing.');
 
-  console.log(JSON.stringify({ initial, running, shop, rotation, audio, assets, pwa, exceptions, errorLogs }, null, 2));
+  await browser.send('Network.emulateNetworkConditions', {
+    offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0
+  });
+  await browser.send('Page.navigate', { url: targetUrl });
+  await wait(1200);
+  let offline;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      offline = await browser.evaluate('({build:BUILD_ID,meta:WA_BUILD_META.buildId,controller:Boolean(navigator.serviceWorker.controller)})');
+      break;
+    } catch { await wait(150); }
+  }
+  await browser.send('Network.emulateNetworkConditions', {
+    offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1
+  });
+  assert(offline && offline.build === initial.build && offline.meta === initial.build && offline.controller,
+    'Offline navigation did not boot the same controlled build.');
+
+  await browser.send('Emulation.setEmulatedMedia', {
+    media: 'screen', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }]
+  });
+  await browser.send('Page.reload', { ignoreCache: true });
+  await wait(1000);
+  const reduced = await browser.evaluate('(() => {' +
+    'G.fx.length=0; burst(baseNode().x,baseNode().y,"#fff",10);' +
+    'return {reduce:REDUCE,particles:G.fx.length};' +
+  '})()');
+  assert(reduced.reduce && reduced.particles <= 3, 'Reduced-motion particle gate failed.');
+  assert(browser.exceptions.length === 0, 'Runtime exceptions: ' + browser.exceptions.join(' | '));
+  assert(browser.errorLogs.length === 0, 'Browser errors: ' + browser.errorLogs.join(' | '));
+
+  console.log(JSON.stringify({
+    build: initial.build,
+    viewportResults,
+    running,
+    shop,
+    rotation,
+    audio,
+    gameplay,
+    pwa: { active: pwa.active, controller: pwa.controller, cached: pwa.cached.length },
+    offline,
+    reduced,
+    exceptions: browser.exceptions,
+    errorLogs: browser.errorLogs
+  }, null, 2));
   console.log('WAVE_ARENA_SMOKE_OK');
 } finally {
   clearTimeout(watchdog);
-  if (socket?.readyState === WebSocket.OPEN) {
-    try {
-      socket.send(JSON.stringify({ id: 999998, method: 'Browser.close' }));
-      await wait(500);
-    } catch {}
-  }
-  for (const task of pending.values()) {
-    clearTimeout(task.timer);
-    task.rejectSend(new Error('Browser test closed.'));
-  }
-  socket?.close();
-  browser.kill();
-  await Promise.race([
-    new Promise(done => browser.once('exit', done)),
-    wait(1000),
-  ]);
-  const safeProfile = resolve(profile), safeTemp = resolve(tmpdir());
-  if (safeProfile.startsWith(safeTemp + '\\') || safeProfile.startsWith(safeTemp + '/')) {
-    await rm(safeProfile, {
-      recursive: true, force: true, maxRetries: 8, retryDelay: 150,
-    }).catch(error => console.warn('Temporary browser profile cleanup deferred:', error.code));
-  }
+  await browser.close();
 }
