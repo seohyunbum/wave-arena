@@ -42,7 +42,8 @@ export async function launchBrowser(targetUrl, initialViewport = { width: 844, h
 
   let port;
   let targets;
-  for (let attempt = 0; attempt < 120; attempt++) {
+  const browserStartAttempts=Math.max(120,Number(process.env.BROWSER_START_ATTEMPTS)||300);
+  for (let attempt = 0; attempt < browserStartAttempts; attempt++) {
     try {
       if (!port) {
         const activePort = await readFile(join(profile, 'DevToolsActivePort'), 'utf8');
@@ -62,7 +63,9 @@ export async function launchBrowser(targetUrl, initialViewport = { width: 844, h
   const page = targets && targets.find(target => target.type === 'page');
   if (!page) {
     browser.kill();
-    throw new Error('Browser DevTools target did not start. ' + browserError.trim());
+    await rm(profile, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }).catch(() => {});
+    throw new Error('Browser DevTools target did not start after ' + (browserStartAttempts/10).toFixed(0) +
+      ' seconds. exit=' + browser.exitCode + ' ' + browserError.trim());
   }
 
   const socket = new WebSocket(page.webSocketDebuggerUrl);
