@@ -25,6 +25,16 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: 모바일·PWA 회귀 검증
+        run: |
+          node --check sw.js
+          node --check scripts/smoke-test.mjs
+          node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8'))"
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/wave-arena-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          sleep 1
+          node scripts/smoke-test.mjs http://127.0.0.1:4173/
       - name: Pages 설정 (꺼져 있으면 켠다)
         uses: actions/configure-pages@v5
         with:

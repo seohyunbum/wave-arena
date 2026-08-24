@@ -1,0 +1,14 @@
+Wave Arena audio asset notice
+=============================
+
+The six OGG files in this directory are unmodified selections from:
+
+- Kenney Interface Sounds
+  https://kenney.nl/assets/interface-sounds
+- Kenney Impact Sounds
+  https://kenney.nl/assets/impact-sounds
+
+Both source packs are dedicated to the public domain under CC0 1.0:
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Attribution is not required. Source filenames and local mappings are recorded in /THIRD_PARTY_ASSETS.md.
