@@ -23,6 +23,7 @@ const browserBin = await findBrowser([
   '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/usr/bin/microsoft-edge',
+  '/usr/bin/google-chrome-stable',
   '/usr/bin/google-chrome',
   '/usr/bin/chromium',
 ]);
@@ -34,11 +35,15 @@ await fetch(targetUrl, { cache: 'no-store' }).then(response => {
 const port = 9333 + Math.floor(Math.random() * 500);
 const profile = await mkdtemp(join(tmpdir(), 'wave-arena-smoke-'));
 const browser = spawn(browserBin, [
-  '--headless=new', '--disable-gpu-sandbox', '--no-first-run', '--no-default-browser-check',
-  `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
+  '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage',
+  '--no-first-run', '--no-default-browser-check',
+  `--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1',
+  `--user-data-dir=${profile}`,
   '--window-size=844,390', targetUrl,
-], { stdio: 'ignore' });
+], { stdio: ['ignore', 'ignore', 'pipe'] });
 
+let browserError = '';
+browser.stderr.on('data', chunk => { browserError = (browserError + chunk).slice(-4000); });
 let socket;
 const pending = new Map(), exceptions = [], errorLogs = [];
 let nextId = 0;
@@ -74,7 +79,7 @@ const assert = (condition, message) => { if (!condition) throw new Error(message
 
 try {
   let targets;
-  for (let attempt = 0; attempt < 50; attempt++) {
+  for (let attempt = 0; attempt < 100; attempt++) {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`);
       if (response.ok) {
@@ -85,7 +90,8 @@ try {
     await wait(100);
   }
   const page = targets?.find(target => target.type === 'page');
-  if (!page) throw new Error('Browser DevTools target did not start.');
+  if (!page) throw new Error(
+    `Browser DevTools target did not start. ${browserError.trim()}`);
 
   socket = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((open, fail) => {
