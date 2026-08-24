@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "viewports": [
+    { "name": "desktop-wide", "width": 1440, "height": 900, "dpr": 1 },
+    { "name": "desktop-compact", "width": 1280, "height": 720, "dpr": 1 },
+    { "name": "mobile-landscape", "width": 844, "height": 390, "dpr": 1.5 },
+    { "name": "mobile-small", "width": 740, "height": 360, "dpr": 1.5 }
+  ],
+  "requiredControls": ["start", "stop", "shopBtn", "rotBtn", "audioBtn"],
+  "flows": [
+    "start-wave",
+    "shop-open-close",
+    "rotate-90deg",
+    "mute-persistence",
+    "turret-place-merge",
+    "save-restore",
+    "stop-wave",
+    "reduced-motion",
+    "offline-navigation"
+  ],
+  "performance": {
+    "viewport": { "width": 844, "height": 390, "dpr": 1.5 },
+    "durationMs": 4000,
+    "enemyCount": 60,
+    "minStructures": 30,
+    "normal": {
+      "minFps": 40,
+      "maxP95FrameMs": 40,
+      "maxOver33Ratio": 0.08
+    },
+    "cpu4x": {
+      "minFps": 24,
+      "maxP95FrameMs": 80,
+      "maxOver50Ratio": 0.20
+    }
+  }
+}
