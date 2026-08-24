@@ -16,13 +16,22 @@
     "save-restore",
     "stop-wave",
     "reduced-motion",
-    "offline-navigation"
+    "offline-navigation",
+    "visual-upgrade-progression"
   ],
+  "visuals": {
+    "allyRanks": 16,
+    "baseRanks": 16,
+    "turretRanks": 15,
+    "projectileArchetypes": 6,
+    "maxProjectileLayers": 6
+  },
   "performance": {
     "viewport": { "width": 844, "height": 390, "dpr": 1.5 },
     "durationMs": 4000,
     "maxDenseDpr": 1.25,
     "enemyCount": 60,
+    "detailEnemyCount": 20,
     "minStructures": 30,
     "normal": {
       "minFps": 40,

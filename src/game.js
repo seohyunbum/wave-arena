@@ -472,7 +472,7 @@ function spawnEnemy(){
   const s=enemyStats(), st=WP[0];
   const e={x:st.x,y:st.y,hp:s.hp,maxHp:s.hp,speed:s.speed,dmg:s.dmg,r:s.r,
            seg:1,target:null,atk:0,flash:0,phase:Math.random()*7,face:0,atkPose:0,
-           slowT:0,weakT:0,freezeT:0,poisonT:0,burnT:0,burnPct:0,burnDps:0};
+           slowT:0,weakT:0,freezeT:0,poisonT:0,burnT:0,burnPct:0,burnDps:0,visual:enemyVisualSpec(G.level,false)};
   for(const f of G.potionField){ if(Math.random()<f.prob) applyPotion(e,f.key); } // 잔류 물약장 → 신규 적에도 확률 적용
   G.enemies.push(e);
 }
@@ -480,7 +480,7 @@ function spawnBoss(){
   const s=enemyStats(), st=WP[0], hp=Math.round(s.hp*CFG.bossHpMult);
   const e={x:st.x,y:st.y,hp,maxHp:hp,speed:s.speed*CFG.bossSpeedMult,dmg:s.dmg*CFG.bossDmgMult,
            r:CFG.eR0*CFG.bossRMult,seg:1,target:null,atk:0,flash:0,phase:Math.random()*7,face:0,atkPose:0,
-           slowT:0,weakT:0,freezeT:0,poisonT:0,burnT:0,burnPct:0,burnDps:0,isBoss:true,bossLevel:G.level};
+           slowT:0,weakT:0,freezeT:0,poisonT:0,burnT:0,burnPct:0,burnDps:0,isBoss:true,bossLevel:G.level,visual:enemyVisualSpec(G.level,true)};
   for(const f of G.potionField){ if(Math.random()<f.prob) applyPotion(e,f.key); }
   G.enemies.push(e);
   floatText(st.x,st.y,'⚠ 보스 등장! (스테이지 '+G.level+')','#ff3b6b');
@@ -607,7 +607,9 @@ function update(dt){
     if(a.cd<=0 && tgt){                                      // 발사 : 쏘는 쪽을 정확히 바라봄
       a.face=Math.atan2(tgt.y-a.y, tgt.x-a.x);
       a.cd=a.fire*(rage?CFG.rageFire:1); a.shootFlash=0.08;
-      G.shots.push({x:a.x,y:a.y,target:tgt,dmg:a.dmg*(rage?CFG.rageDmg:1),speed:540,col:'#ffd166'});
+      const visualTier=Math.max(visualClamp(G.upTotal,15),visualClamp(G.weaponTier,15));
+      G.shots.push({x:a.x,y:a.y,target:tgt,dmg:a.dmg*(rage?CFG.rageDmg:1),speed:540,col:'#ffd166',
+                    visual:projectileVisualSpec('ally',visualTier)});
     }
   }
   for(const t of G.turrets){                     // 총구 조준(정지 중에도 계속 목표를 향함)
@@ -654,7 +656,8 @@ function update(dt){
           t.aim=Math.atan2(e.y-t.y, e.x-t.x);
           const mz=muzzleZ(t), off=T.base*0.2+T.bl;
           const bx=t.x+Math.cos(t.aim)*off, by=t.y+Math.sin(t.aim)*off;
-          G.beams.push({x1:bx, y1:by, z1:mz, x2:e.x, y2:e.y, z2:26, t:0, life:0.3});
+          G.beams.push({x1:bx, y1:by, z1:mz, x2:e.x, y2:e.y, z2:26, t:0, life:0.3,
+                        visual:projectileVisualSpec('launcher',t.tier)});
           e.hp=-1; e.dead=true; e.flash=0.2;   // 무한 데미지 : 보스도 한 방
           ringFx(e.x,e.y,'rgb(104,235,255)',58,.55); G.shake=Math.max(G.shake,e.isBoss?8:4);
           playSfx(e.isBoss?'heavy':'confirm',e.isBoss ? .62 : .24,180);
@@ -677,7 +680,8 @@ function update(dt){
         G.shots.push({x:t.x+Math.cos(t.aim)*off, y:t.y+Math.sin(t.aim)*off, z:mz,
                       target:e,dmg:T.dmg*(rage?CFG.rageDmg:1),speed:rap?1400:640,
                       col:T.top,splash:T.splash||0,burn:T.burn||0,slow:T.slow||0,
-                      size:rap?3.2:5+t.tier, src:rap?t:null});
+                      size:rap?3.2:5+t.tier, src:rap?t:null,
+                      visual:projectileVisualSpec(rap?'rapid':'turret',t.tier)});
         if(!rap || !REDUCE) burst(t.x+Math.cos(t.aim)*off, t.y+Math.sin(t.aim)*off, T.top, rap?1:2); } }
   }
   if(active){
@@ -758,9 +762,123 @@ function update(dt){
   updateHUD();
 }
 
+// ---- 등급별 방어 기지·발사체 렌더러 ---------------------------------------
+function drawBaseFortress(g,compact){
+  const b=baseNode(),V=baseVisualSpec(G.upTotal),pulse=.5+.5*Math.sin(G.anim*(2.1+V.grade*.22));
+  if(V.shield&&!compact){
+    g.save(); g.globalCompositeOperation='lighter';
+    screenEllipse(g,b.x,b.y,5,70+pulse*5,70+pulse*5,V.glow+'10',V.glow+'88',Math.max(1,1.7*CAM.scale));
+    g.restore();
+  }
+  if(compact){
+    box(g,b.x,b.y,0,54,54,8,V.base); box(g,b.x,b.y,8,24,24,V.keepHeight,V.armor);
+    box(g,b.x,b.y,8+V.keepHeight,13,13,7,V.glow); return;
+  }
+  const P=[],add=(x,y,z,len,wid,h,c,a)=>P.push({x,y,z,len,wid,h,c,a:a||0});
+  add(b.x,b.y,0,78,78,7,V.base,0);
+  for(let i=0;i<V.grade+1;i++) add(b.x,b.y,6+i*2.2,70-i*4,70-i*4,2,V.trim,0);
+  const corners=[[-54,-54],[54,-54],[54,54],[-54,54]];
+  for(let i=0;i<V.towers;i++){
+    const q=corners[i],h=V.wallHeight+7+(i%2)*3;
+    add(b.x+q[0],b.y+q[1],0,17+V.variant,17+V.variant,h,V.dark,0);
+    add(b.x+q[0],b.y+q[1],h,21+V.grade,21+V.grade,5,V.armor,G.anim*.18*(i%2?1:-1));
+    add(b.x+q[0],b.y+q[1],h+5,8,8,6+V.grade,V.glow,0);
+  }
+  add(b.x,b.y-54,2,88,7,V.wallHeight,V.armor,0);
+  add(b.x,b.y+54,2,88,7,V.wallHeight,V.armor,0);
+  add(b.x-54,b.y,2,88,7,V.wallHeight,V.armor,Math.PI/2);
+  add(b.x+54,b.y,2,88,7,V.wallHeight,V.armor,Math.PI/2);
+  add(b.x,b.y,7,27+V.grade*2,27+V.grade*2,V.keepHeight,V.dark,0);
+  add(b.x,b.y,7+V.keepHeight*.42,34+V.variant*3,34+V.variant*3,5,V.armor,G.anim*.12);
+  add(b.x,b.y,7+V.keepHeight,20+V.grade,20+V.grade,7,V.trim,-G.anim*.18);
+  add(b.x,b.y,14+V.keepHeight,10+V.grade*.8,10+V.grade*.8,9+V.grade,V.glow,G.anim*.36);
+  for(let i=0;i<V.orbitals;i++){
+    const a=G.anim*(.45+i*.08)+i*Math.PI*2/V.orbitals,r=27+V.grade*3;
+    add(b.x+Math.cos(a)*r,b.y+Math.sin(a)*r,20+V.keepHeight+i*3,9,5,4,V.glow,a);
+  }
+  P.sort((q,r)=>(depthOf(q.x,q.y)-depthOf(r.x,r.y))||q.z-r.z);
+  for(const q of P) rbox(g,q.x,q.y,q.z,q.len,q.wid,q.h,q.a,q.c);
+  if(V.grade>=2){
+    const sx=isoX(b.x,b.y),sy=isoY(b.x,b.y,22+V.keepHeight);
+    g.save(); g.globalCompositeOperation='lighter'; g.globalAlpha=.18+.15*pulse; g.fillStyle=V.glow;
+    g.beginPath(); g.arc(sx,sy,Math.max(3,(6+V.grade*1.5)*CAM.scale),0,7); g.fill(); g.restore();
+  }
+}
+function drawProjectile(g,o,compact){
+  const v=o.visual||projectileVisualSpec('ally',0),ps=o.size||7,z=o.z==null?30:o.z;
+  const sx=isoX(o.x,o.y),sy=isoY(o.x,o.y,z);
+  const tx=o.target?isoX(o.target.x,o.target.y):sx,ty=o.target?isoY(o.target.x,o.target.y,22):sy;
+  const bx=sx-tx,by=sy-ty,dl=Math.hypot(bx,by)||1,ux=-bx/dl,uy=-by/dl,px=-uy,py=ux;
+  const col=o.col||'#ffd166',trail=Math.max(7,(16+v.grade*5)*v.trailScale*CAM.scale);
+  const radius=Math.max(1.35,(ps*.28+v.grade*.28)*CAM.scale),rapid=v.kind==='rapid';
+  g.save(); g.globalCompositeOperation='lighter'; g.lineCap='round';
+  if(!compact&&!rapid){
+    g.globalAlpha=.14+.025*v.grade; g.strokeStyle=col; g.lineWidth=Math.max(3,(ps*1.35+v.grade)*CAM.scale);
+    g.beginPath(); g.moveTo(sx,sy); g.lineTo(sx-ux*trail,sy-uy*trail); g.stroke();
+  }
+  g.globalAlpha=.72; g.strokeStyle=col; g.lineWidth=Math.max(1.3,(rapid?1.7:2.2+v.grade*.28)*CAM.scale);
+  g.beginPath(); g.moveTo(sx,sy); g.lineTo(sx-ux*trail*(rapid?.58:.82),sy-uy*trail*(rapid?.58:.82)); g.stroke();
+  g.globalAlpha=.98; g.fillStyle='#ffffff';
+  if(v.shape==='slug'){
+    g.beginPath(); g.arc(sx,sy,radius,0,7); g.fill();
+  } else if(v.shape==='bolt'){
+    g.beginPath(); g.moveTo(sx+ux*radius*2.2,sy+uy*radius*2.2); g.lineTo(sx+px*radius,sy+py*radius);
+    g.lineTo(sx-ux*radius*2,sy-uy*radius*2); g.lineTo(sx-px*radius,sy-py*radius); g.closePath(); g.fill();
+  } else if(v.shape==='lance'){
+    g.strokeStyle='#ffffff'; g.lineWidth=Math.max(1.4,radius*.75); g.beginPath();
+    g.moveTo(sx+ux*radius*3,sy+uy*radius*3); g.lineTo(sx-ux*radius*3,sy-uy*radius*3); g.stroke();
+    if(!compact){ g.strokeStyle=col; g.globalAlpha=.75; for(const q of [-1,1]){ g.beginPath();
+      g.moveTo(sx+px*radius*q*1.6,sy+py*radius*q*1.6); g.lineTo(sx-ux*radius*3,sy-uy*radius*3); g.stroke(); } }
+  } else if(v.shape==='plasma'){
+    g.fillStyle=col; g.globalAlpha=.25; g.beginPath(); g.arc(sx,sy,radius*2.8,0,7); g.fill();
+    g.globalAlpha=1; g.fillStyle='#ffffff'; g.beginPath(); g.arc(sx,sy,radius*1.15,0,7); g.fill();
+  } else if(v.shape==='comet'){
+    g.fillStyle=col; g.globalAlpha=.82; g.beginPath(); g.moveTo(sx+ux*radius*3.4,sy+uy*radius*3.4);
+    g.lineTo(sx-ux*radius*2+px*radius*2.5,sy-uy*radius*2+py*radius*2.5);
+    g.lineTo(sx-ux*radius*.5,sy-uy*radius*.5); g.lineTo(sx-ux*radius*2-px*radius*2.5,sy-uy*radius*2-py*radius*2.5); g.closePath(); g.fill();
+    g.globalAlpha=1; g.fillStyle='#ffffff'; g.beginPath(); g.arc(sx,sy,radius*.85,0,7); g.fill();
+  } else {
+    g.fillStyle=col; g.globalAlpha=.28; g.beginPath(); g.arc(sx,sy,radius*3.4,0,7); g.fill();
+    g.globalAlpha=.9; g.strokeStyle='#ffffff'; g.lineWidth=Math.max(1,radius*.5); g.beginPath(); g.arc(sx,sy,radius*1.8,0,7); g.stroke();
+    g.beginPath(); g.moveTo(sx-ux*radius*3.3,sy-uy*radius*3.3); g.lineTo(sx+ux*radius*3.3,sy+uy*radius*3.3);
+    g.moveTo(sx-px*radius*3.3,sy-py*radius*3.3); g.lineTo(sx+px*radius*3.3,sy+py*radius*3.3); g.stroke();
+    g.fillStyle='#ffffff'; g.beginPath(); g.arc(sx,sy,radius*.9,0,7); g.fill();
+  }
+  if(!compact&&!rapid&&v.satellites){
+    g.fillStyle=col; g.globalAlpha=.86;
+    for(let i=0;i<v.satellites;i++){
+      const a=G.anim*v.pulseRate+i*Math.PI*2/v.satellites,r=radius*(2.2+v.variant*.25);
+      g.beginPath(); g.arc(sx+Math.cos(a)*r,sy+Math.sin(a)*r,Math.max(.7,radius*.42),0,7); g.fill();
+    }
+  }
+  g.restore();
+}
+function drawAnnihilationBeam(g,bm,compact){
+  const v=bm.visual||projectileVisualSpec('launcher',0),a=Math.max(0,1-bm.t/bm.life);
+  const x1=isoX(bm.x1,bm.y1),y1=isoY(bm.x1,bm.y1,bm.z1),x2=isoX(bm.x2,bm.y2),y2=isoY(bm.x2,bm.y2,bm.z2);
+  const col=VISUAL_MATERIALS[v.grade].glow;
+  g.save(); g.globalCompositeOperation='lighter'; g.lineCap='round';
+  g.globalAlpha=a*(.34+.04*v.grade); g.strokeStyle=col; g.lineWidth=(Math.max(4,10*CAM.scale)+v.grade*2.2)*a+2;
+  g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+  if(!compact&&v.grade>=2){
+    const dx=x2-x1,dy=y2-y1,dl=Math.hypot(dx,dy)||1,px=-dy/dl,py=dx/dl,off=3+v.grade;
+    g.globalAlpha=a*.72; g.lineWidth=Math.max(1,1.4*CAM.scale); g.strokeStyle=v.grade>=4?'#ffe9a3':col;
+    for(const q of [-1,1]){ g.beginPath(); g.moveTo(x1+px*off*q,y1+py*off*q); g.lineTo(x2+px*off*q,y2+py*off*q); g.stroke(); }
+  }
+  g.globalAlpha=a; g.strokeStyle='#ffffff'; g.lineWidth=(Math.max(1,3.2*CAM.scale)+v.grade*.4)*a+1;
+  g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+  if(!compact&&v.grade>=3){
+    g.fillStyle='#ffffff'; for(let i=1;i<=v.grade-1;i++){
+      const u=(i/(v.grade))+.04*Math.sin(G.anim*8+i),x=x1+(x2-x1)*u,y=y1+(y2-y1)*u;
+      g.globalAlpha=a*.85; g.beginPath(); g.arc(x,y,Math.max(1.5,(2+v.grade*.35)*CAM.scale),0,7); g.fill();
+    }
+  }
+  g.restore();
+}
 function draw(){
   const EN=G.enemies.length;
   const SCENE_DENSE=EN>45 && G.turrets.length>=30;
+  const SCENE_DETAIL_PRESSURE=!SCENE_DENSE && EN>=18 && G.turrets.length>=28;
   if(RENDER_DENSE!==SCENE_DENSE){ RENDER_DENSE=SCENE_DENSE; resize(); }
   if(backdrop) ctx.drawImage(backdrop,0,0,W,H);
   const shake=REDUCE?0:G.shake, sx=shake?(Math.random()*2-1)*shake:0, sy=shake?(Math.random()*2-1)*shake*.65:0;
@@ -786,7 +904,8 @@ function draw(){
 
   // 극한 개체 수에서는 화면상 몇 픽셀뿐인 세부 부품을 실루엣 LOD로 대체한다.
   // 평상시에는 기존 전체 디테일을 유지하고, 60적+30구조물급에서만 프레임 예산을 우선한다.
-  const LOD = SCENE_DENSE ? 3 : EN>45 ? 2 : EN>22 ? 1 : 0;
+  const LOD = SCENE_DENSE ? 3 : SCENE_DETAIL_PRESSURE ? 1 : EN>45 ? 2 : EN>22 ? 1 : 0;
+  const allyVisual=allyVisualSpec(G.upTotal,G.weaponTier,G.armorTier);
 
   // 접지 그림자는 유닛보다 먼저 그려 높이감과 가독성을 확보
   for(const t of G.turrets) drawEntityShadow(ctx,t,'t',SCENE_DENSE);
@@ -794,7 +913,8 @@ function draw(){
   for(const e of G.enemies) drawEntityShadow(ctx,e,'e',SCENE_DENSE);
 
   // 깊이 정렬(painter's algorithm)
-  const items=[];
+  const items=[],base=baseNode();
+  items.push({d:depthOf(base.x,base.y), k:'b', o:base});
   for(const t of G.turrets) items.push({d:depthOf(t.x,t.y), k:'t', o:t});
   for(const a of G.allies) items.push({d:depthOf(a.x,a.y), k:'a', o:a});
   for(const e of G.enemies) items.push({d:depthOf(e.x,e.y), k:'e', o:e});
@@ -804,28 +924,24 @@ function draw(){
 
   for(const it of items){
     const o=it.o;
-    if(it.k==='t'){
-      drawTurret(ctx,o,SCENE_DENSE?2:0);
+    if(it.k==='b'){
+      drawBaseFortress(ctx,SCENE_DENSE);
+    } else if(it.k==='t'){
+      drawTurret(ctx,o,SCENE_DENSE?2:(SCENE_DETAIL_PRESSURE?1:0));
     } else if(it.k==='a'){
       if(o.dead){ // 쓰러진 아군 = 납작한 회색 블록
         box(ctx,o.x,o.y,0,22,14,5,'#5b6478');
       } else {
         const C=o.shootFlash>0?ALLY_FLASH_C:ALLY_C;
-        const top=character(ctx,o.x,o.y,1.05,C,o.phase,false,o.face||0,o.shootFlash>0?1:0,LOD);
+        const top=character(ctx,o.x,o.y,1.05,C,o.phase,false,o.face||0,o.shootFlash>0?1:0,LOD,allyVisual);
         hpBar(o.x,o.y,top+10,o.hp/o.maxHp,'#38e8b0');
       }
     } else if(it.k==='e'){
-      const s=o.r/CFG.eR0, C=enemyPalette(o);
-      const top=character(ctx,o.x,o.y,s,C,o.phase,o.freezeT<=0,o.face||0,o.atkPose>0?1:0,o.isBoss?0:LOD);
+      const s=o.r/CFG.eR0, C=enemyPalette(o),visual=o.visual||enemyVisualSpec(o.bossLevel||G.level,!!o.isBoss);
+      const top=character(ctx,o.x,o.y,s,C,o.phase,o.freezeT<=0,o.face||0,o.atkPose>0?1:0,o.isBoss?0:LOD,visual);
       if(o.isBoss||o.hp<o.maxHp) hpBar(o.x,o.y,top+8,o.hp/o.maxHp, o.isBoss?'#ff3b6b':'#ff8a97');
     } else if(it.k==='p'){
-      const ps=o.size||7,z=o.z==null?30:o.z,sx0=isoX(o.x,o.y),sy0=isoY(o.x,o.y,z);
-      const tx=o.target?isoX(o.target.x,o.target.y):sx0,ty=o.target?isoY(o.target.x,o.target.y,22):sy0;
-      const dx=sx0-tx,dy=sy0-ty,dl=Math.hypot(dx,dy)||1,trail=Math.max(7,22*CAM.scale);
-      ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.lineCap='round';
-      ctx.strokeStyle=o.col||'#ffd166'; ctx.globalAlpha=.24; ctx.lineWidth=Math.max(3,ps*1.5*CAM.scale);
-      ctx.beginPath(); ctx.moveTo(sx0,sy0); ctx.lineTo(sx0+dx/dl*trail,sy0+dy/dl*trail); ctx.stroke();
-      ctx.globalAlpha=.95; ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.arc(sx0,sy0,Math.max(1.4,ps*.28*CAM.scale),0,7); ctx.fill(); ctx.restore();
+      drawProjectile(ctx,o,SCENE_DENSE||(o.visual&&o.visual.kind==='rapid'&&G.shots.length>90));
     } else {
       const al=Math.max(0,1-o.t/o.life),sx0=isoX(o.x,o.y),sy0=isoY(o.x,o.y,o.z);
       ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=al;
@@ -836,19 +952,8 @@ function draw(){
 
   drawRings(ctx);
 
-  // 에너지 빔 (발사기 → 소멸시킨 적)
-  for(const bm of G.beams){
-    const a=Math.max(0,1-bm.t/bm.life);
-    const x1=isoX(bm.x1,bm.y1), y1=isoY(bm.x1,bm.y1,bm.z1);
-    const x2=isoX(bm.x2,bm.y2), y2=isoY(bm.x2,bm.y2,bm.z2);
-    ctx.globalAlpha=a*0.55; ctx.strokeStyle='#5ce1ff';
-    ctx.lineWidth=Math.max(3,11*CAM.scale)*a+2; ctx.lineCap='round';
-    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-    ctx.globalAlpha=a; ctx.strokeStyle='#ffffff';
-    ctx.lineWidth=Math.max(1,3.5*CAM.scale)*a+1;
-    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-    ctx.globalAlpha=1; ctx.lineCap='butt';
-  }
+  // 에너지 빔 (등급이 오를수록 외곽 레일·에너지 노드가 추가됨)
+  for(const bm of G.beams) drawAnnihilationBeam(ctx,bm,SCENE_DENSE);
 
   // 데미지 숫자 (화면공간)
   ctx.textAlign='center';
@@ -875,8 +980,8 @@ function draw(){
     if(G.stopCd>0) subline('끝내기 쿨타임 '+Math.ceil(G.stopCd)+'초 (게임 진행 중 감소)','#ff8a97',52); }
 }
 // ---- 레이저 그리기 : 양쪽 기둥 + 길을 가로지르는 빔 ----
-function drawLaser(g,t){
-  const L=tdef(t), sel=(G.selTurret===t), ang=t.ang||0;
+function drawLaser(g,t,lod){
+  const L=tdef(t), sel=(G.selTurret===t), ang=t.ang||0,V=turretVisualSpec('laser',t.tier),mid=lod>=1;
   const ca=Math.cos(ang), sa=Math.sin(ang), hl=L.len/2;
   const ax=t.x-ca*hl, ay=t.y-sa*hl, bx=t.x+ca*hl, by=t.y+sa*hl;   // 빔 양끝
   const pulse=0.72+0.28*Math.sin(G.anim*11);
@@ -886,10 +991,14 @@ function drawLaser(g,t){
       (L.base*0.8)*ISO_X*1.42*CAM.scale,(L.base*0.8)*ISO_Y*1.42*CAM.scale,0,0,7); g.stroke();
   }
   const P=[], add=(x,y,z,len,wid,h,c,a)=>P.push({x,y,z,len,wid,h,c,a:(a===undefined?0:a)});
-  for(const [px,py] of [[ax,ay],[bx,by]]){                        // 발신기·반사기 기둥
-    add(px,py,0,L.base*0.62,L.base*0.62,7,'#5b6478');
-    add(px,py,7,L.base*0.44,L.base*0.44,L.hh,L.col,ang);
-    add(px,py,7+L.hh,L.base*0.52,L.base*0.52,6,L.top,ang);
+  for(const [px,py] of [[ax,ay],[bx,by]]){                        // 등급별 발신기·반사기 파일런
+    add(px,py,0,L.base*0.66,L.base*0.66,7,V.base);
+    add(px,py,7,L.base*(.44+V.grade*.025),L.base*(.44+V.grade*.025),L.hh,L.col,ang);
+    add(px,py,7+L.hh,L.base*(.52+V.variant*.035),L.base*(.52+V.variant*.035),6+V.grade*.8,V.trim,ang);
+    if(V.grade>=2&&!mid){
+      for(const q of [-1,1]){ const ox=-sa*q*(L.base*.34),oy=ca*q*(L.base*.34);
+        add(px+ox,py+oy,11+L.hh*.3,5,5,10+V.grade*2,V.glow,ang); }
+    }
   }
   add(t.x,t.y,7+L.hh*0.55,L.len,L.width*0.5,3.5,L.col,ang);       // 빔 받침(어두운 심)
   P.sort((q,r)=> (depthOf(q.x,q.y)-depthOf(r.x,r.y)) || q.z-r.z);
@@ -906,20 +1015,28 @@ function drawLaser(g,t){
   g.globalAlpha=1; g.strokeStyle='#ffffff';
   g.lineWidth=Math.max(1, L.width*0.10*ISO_Y*1.42*CAM.scale);
   g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+  if(V.grade>=3&&!mid){
+    const dx=x2-x1,dy=y2-y1,dl=Math.hypot(dx,dy)||1,px=-dy/dl,py=dx/dl,off=3+V.grade;
+    g.globalAlpha=.62*pulse; g.strokeStyle=V.glow; g.lineWidth=Math.max(1,1.2*CAM.scale);
+    for(const q of [-1,1]){ g.beginPath(); g.moveTo(x1+px*off*q,y1+py*off*q); g.lineTo(x2+px*off*q,y2+py*off*q); g.stroke(); }
+    g.fillStyle='#ffffff'; for(let i=1;i<=V.grade-2;i++){ const u=(i/(V.grade-1)+G.anim*.34)%1;
+      g.beginPath(); g.arc(x1+dx*u,y1+dy*u,Math.max(1.3,(2+V.variant*.45)*CAM.scale),0,7); g.fill(); }
+    g.globalAlpha=1;
+  }
   g.lineCap='butt';
   // 라벨
   const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,7+L.hh+26);
   g.textAlign='center'; g.font='bold '+Math.max(9,11*CAM.scale)+'px Segoe UI';
   g.lineWidth=3; g.strokeStyle='rgba(0,0,0,.65)';
-  const lb='Lv'+(t.tier+1)+' 레이저';
+  const lb='Lv'+(t.tier+1)+' · '+VISUAL_GRADE_NAMES[V.grade]+' 레이저';
   g.strokeText(lb,sx,sy); g.fillStyle=L.top; g.fillText(lb,sx,sy);
 }
 // 극한 부하용 포탑 LOD. 작은 화면에서도 종류·방향·충전 상태는 남기고 미세 부품만 생략한다.
 function drawLaserCompact(g,t){
-  const L=tdef(t),ang=t.ang||0,ca=Math.cos(ang),sa=Math.sin(ang),hl=L.len/2;
+  const L=tdef(t),V=turretVisualSpec('laser',t.tier),ang=t.ang||0,ca=Math.cos(ang),sa=Math.sin(ang),hl=L.len/2;
   const ax=t.x-ca*hl,ay=t.y-sa*hl,bx=t.x+ca*hl,by=t.y+sa*hl,z=7+L.hh*.55+3;
-  box(g,ax,ay,0,L.base*.58,L.base*.58,7+L.hh,L.col);
-  box(g,bx,by,0,L.base*.58,L.base*.58,7+L.hh,L.col);
+  box(g,ax,ay,0,L.base*.58,L.base*.58,7+L.hh,V.armor);
+  box(g,bx,by,0,L.base*.58,L.base*.58,7+L.hh,V.armor);
   const x1=isoX(ax,ay),y1=isoY(ax,ay,z),x2=isoX(bx,by),y2=isoY(bx,by,z);
   g.save(); g.lineCap='round'; g.strokeStyle=L.top;
   g.globalAlpha=.34; g.lineWidth=Math.max(4,L.width*.78*ISO_Y*1.42*CAM.scale);
@@ -929,10 +1046,11 @@ function drawLaserCompact(g,t){
 }
 function drawTurretCompact(g,t){
   if(isLaser(t)){ drawLaserCompact(g,t); return; }
-  const T=tdef(t),ang=t.aim||0,ca=Math.cos(ang),sa=Math.sin(ang);
+  const T=tdef(t),V=turretVisualSpec(kindOf(t),t.tier),ang=t.aim||0,ca=Math.cos(ang),sa=Math.sin(ang);
   const baseH=8+t.tier*.8,bodyH=Math.max(12,T.hh*.82),headZ=baseH+bodyH;
-  box(g,t.x,t.y,0,T.base,T.base,baseH,'#6b7280');
+  box(g,t.x,t.y,0,T.base,T.base,baseH,V.base);
   box(g,t.x,t.y,baseH,T.body*.9,T.body*.9,bodyH,T.col);
+  box(g,t.x,t.y,baseH+bodyH*.48,Math.max(7,T.body*.45),Math.max(7,T.body*.45),5,V.glow);
   rbox(g,t.x,t.y,headZ,T.base*.64,T.base*.58,10+t.tier*1.2,ang,T.top);
   const barrelLen=Math.max(12,T.bl||T.len*.3),forward=T.base*.18+barrelLen*.5;
   const bx=t.x+ca*forward,by=t.y+sa*forward,bz=headZ+3;
@@ -946,8 +1064,8 @@ function drawTurretCompact(g,t){
 // ---- 포탑 그리기 : 등급마다 크기·모양이 다르고, 총구가 적을 향해 돌아감 ----
 function drawTurret(g,t,lod){
   if(lod>=2){ drawTurretCompact(g,t); return; }
-  if(isLaser(t)){ drawLaser(g,t); return; }
-  const T=tdef(t), sel=(G.selTurret===t);
+  if(isLaser(t)){ drawLaser(g,t,lod); return; }
+  const T=tdef(t), sel=(G.selTurret===t),V=turretVisualSpec(kindOf(t),t.tier),mid=lod>=1;
   const ang=t.aim||0, ca=Math.cos(ang), sa=Math.sin(ang);
   const recoil=(t.shootFlash>0? t.shootFlash*26 : 0);         // 발사 반동(총열이 뒤로 밀림)
   const hot=t.shootFlash>0;
@@ -961,8 +1079,8 @@ function drawTurret(g,t,lod){
 
   // 부위를 모아 깊이 정렬 후 그린다(뒤쪽 총열이 머리에 가려지도록)
   const P=[], add=(x,y,z,len,wid,h,c,a)=>P.push({x,y,z,len,wid,h,c,a:(a===undefined?0:a)});
-  add(t.x,t.y,0,T.base,T.base,baseH,'#6b7280');                          // 받침대
-  add(t.x,t.y,baseH-1.5,T.base*0.86,T.base*0.86,2,'#565f70');
+  add(t.x,t.y,0,T.base,T.base,baseH,V.base);                              // 등급 재질 받침대
+  add(t.x,t.y,baseH-1.5,T.base*0.86,T.base*0.86,2,V.trim);
 
   // ---- 등급별 기둥 외형 ----
   const S=T.style, bw=T.body;
@@ -1033,6 +1151,23 @@ function drawTurret(g,t,lod){
       add(p[0],p[1],headZ+headH-2,5,5,12,'#ffd166',ang); }
   }
 
+  // 공통 진화 키트: 모든 정확한 레벨에 서로 다른 받침 링·문장·파일런·오비탈을 부여한다.
+  const ringCount=mid?1:V.plinthRings,pylonCount=mid?Math.min(2,V.pylons):V.pylons;
+  for(let i=0;i<ringCount;i++) add(t.x,t.y,baseH+2+i*4,T.base*(.78-i*.06),T.base*(.78-i*.06),2.4,i===ringCount-1?V.trim:V.dark,G.anim*.08*(i%2?1:-1));
+  for(let i=0;i<pylonCount;i++){
+    const a=i*Math.PI*2/pylonCount+Math.PI/4,r=T.base*.4,pw=4.5+V.variant;
+    add(t.x+Math.cos(a)*r,t.y+Math.sin(a)*r,baseH+3,pw,pw,9+V.grade*2,V.armor,a);
+    add(t.x+Math.cos(a)*r,t.y+Math.sin(a)*r,baseH+12+V.grade*2,pw*.72,pw*.72,3,V.glow,a);
+  }
+  add(t.x,t.y,baseH+T.hh*.52,7+V.grade*1.2,7+V.grade*1.2,5+V.variant,V.glow,G.anim*(.25+V.grade*.04));
+  for(let i=0;i<V.crestCount;i++){
+    const q=side((i-(V.crestCount-1)/2)*(6+V.grade),-T.body*.28);
+    add(q[0],q[1],headZ-4,4+V.variant,4,7+V.grade,V.trim,ang);
+  }
+  for(let i=0;i<(mid?0:V.orbitals);i++){
+    const a=G.anim*(.55+i*.07)+i*Math.PI*2/V.orbitals,r=T.body*.85+V.grade*2;
+    add(t.x+Math.cos(a)*r,t.y+Math.sin(a)*r,headZ+headH+8+i*2,8+V.variant,4,4,V.glow,a);
+  }
   // ---- 포탑 머리 + 총열(적을 향해 회전) ----
   add(t.x,t.y,headZ,T.base*0.64,T.base*0.58,headH, hot?'#ffffff':T.top, ang);
   const bl=T.bl, bwid=T.bw, bz=headZ+headH*0.30, root=T.base*0.2-recoil*0.35;
@@ -1041,8 +1176,9 @@ function drawTurret(g,t,lod){
   if(T.rotor){                                                          // 미니건 : 돌아가는 총열 뭉치
     const spin=t.spin||0, R=bwid*1.25;
     add(t.x,t.y,bz,bl*0.34,bwid*2.5,bwid*2.5, hot?'#ffe9a3':'#3a3f49', ang);   // 로터 하우징
-    for(let i=0;i<6;i++){
-      const a=spin+i*Math.PI/3, c=side(Math.cos(a)*R, root+bl*0.5);
+    const rotorParts=mid?3:6;
+    for(let i=0;i<rotorParts;i++){
+      const a=spin+i*Math.PI*2/rotorParts, c=side(Math.cos(a)*R, root+bl*0.5);
       add(c[0],c[1],bz+Math.sin(a)*R, bl, bwid*0.72, bwid*0.72, hot?'#fff3c4':'#5a616e', ang);
     }
     if(hot){ const f=side(0, root+bl+bwid*1.4);
@@ -1054,10 +1190,10 @@ function drawTurret(g,t,lod){
   }
   for(const so of offs){
     const c=side(so, root+bl*0.5);
-    add(c[0],c[1],bz,bl,bwid,bwid, hot?'#fff3c4':(nrg?'#24507e':'#4a5364'), ang);   // 총열/방출관
+    add(c[0],c[1],bz,bl,bwid,bwid, hot?'#fff3c4':(nrg?V.armor:V.dark), ang);   // 총열/방출관
     const m=side(so, root+bl);
     add(m[0],m[1],bz-bwid*0.25,bwid*0.9,bwid*1.45,bwid*1.45,
-        hot?'#ffffff':(charged?'#5ce1ff':(nrg?'#16324f':'#39404f')), ang);          // 총구/방출구
+        hot?'#ffffff':(charged?V.glow:(nrg?V.dark:V.trim)), ang);          // 총구/방출구
     if(nrg&&charged){                                                     // 방출관 에너지 링
       for(const u of [0.35,0.62,0.88]){ const r=side(so, root+bl*u);
         add(r[0],r[1],bz-1,3.5,bwid*1.3,bwid*1.3,'#7cf3ff', ang); }
@@ -1073,9 +1209,10 @@ function drawTurret(g,t,lod){
 // 라벨 : 일반/연사 포탑=등급 / 에너지 발사기=남은 코일 시간
 function turretLabel(g,t,T,headZ,headH){
   const sx=isoX(t.x,t.y), sy=isoY(t.x,t.y,headZ+headH+(T.style==='dragon'?34:22));
-  const label = isLauncher(t) ? ('Lv'+(t.tier+1)+(t.coilT>0 ? ' ⚡'+Math.ceil(t.coilT)+'초' : ' 코일없음'))
-              : isRapid(t)    ? ('Lv'+(t.tier+1)+' '+T.n)
-                              : 'Lv'+(t.tier+1);
+  const V=turretVisualSpec(kindOf(t),t.tier);
+  const label = isLauncher(t) ? ('Lv'+(t.tier+1)+' '+VISUAL_GRADE_NAMES[V.grade]+(t.coilT>0 ? ' ⚡'+Math.ceil(t.coilT)+'초' : ' 코일없음'))
+              : isRapid(t)    ? ('Lv'+(t.tier+1)+' '+VISUAL_GRADE_NAMES[V.grade])
+                              : 'Lv'+(t.tier+1)+' · '+VISUAL_GRADE_NAMES[V.grade];
   const lcol  = isLauncher(t) ? (t.coilT>0?'#7cf3ff':'#8b97b8') : T.top;
   g.textAlign='center'; g.font='bold '+Math.max(9,11*CAM.scale)+'px Segoe UI';
   g.lineWidth=3; g.strokeStyle='rgba(0,0,0,.65)';

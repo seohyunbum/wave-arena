@@ -288,74 +288,122 @@ const ENEMY_SKIN='#c9705f', ENEMY_TORSO='#8b1a2b', ENEMY_LEG='#341018',
 const EYE_COL='#141a24';
 // 사람 1명 그리기. 로컬 좌표 : +x=앞(바라보는 방향), +y=왼쪽, z=위
 // lod = 디테일 단계 (0=전체, 1=얼굴/손 생략, 2=최소, 3=극한 부하용 실루엣)
-function characterCompact(g,x,y,s,C,phase,moving,face){
+function characterCompact(g,x,y,s,C,phase,moving,face,V){
   const bob=moving&&!REDUCE?Math.abs(Math.sin(phase))*1.3*s:0;
   const u=Math.max(.65,CAM.scale*s),sx=isoX(x,y),sy=isoY(x,y,0)-bob*CAM.scale;
-  // 고밀도 화면에서 3D 부품은 수 픽셀로 겹친다. 동일 팔레트의 선명한 블록 실루엣으로 읽힘을 보존한다.
+  // 고밀도 화면은 부품 대신 등급 팔레트·코어·무기 실루엣만 남긴다.
+  const torso=V?V.armor:C.torso,trim=V?V.trim:C.hair;
   g.fillStyle=C.leg;
   g.fillRect(sx-4.5*u,sy-10*u,3.5*u,10*u); g.fillRect(sx+u,sy-10*u,3.5*u,10*u);
-  g.fillStyle=C.torso; g.fillRect(sx-5.5*u,sy-20*u,11*u,11*u);
-  g.fillStyle=C.skin; g.fillRect(sx-3.8*u,sy-27*u,7.6*u,7.6*u);
-  g.fillStyle=C.hair; g.fillRect(sx-4*u,sy-28.5*u,8*u,2.3*u);
+  g.fillStyle=torso; g.fillRect(sx-5.8*u,sy-20.5*u,11.6*u,11.5*u);
+  if(V&&V.grade>=2){ g.fillStyle=trim; g.fillRect(sx-5.8*u,sy-16.5*u,11.6*u,2.2*u); }
+  g.fillStyle=C.skin; g.fillRect(sx-3.8*u,sy-28*u,7.6*u,7.6*u);
+  g.fillStyle=(V&&V.helmet)?V.dark:C.hair; g.fillRect(sx-4.2*u,sy-29*u,8.4*u,(V&&V.helmet)?3.5*u:2.3*u);
   const tx=isoX(x+Math.cos(face)*10,y+Math.sin(face)*10),ty=isoY(x+Math.cos(face)*10,y+Math.sin(face)*10,0);
   const dx=tx-sx,dy=ty-isoY(x,y,0),dl=Math.hypot(dx,dy)||1;
-  g.strokeStyle=C.hair; g.lineWidth=Math.max(1,1.5*u); g.beginPath();
-  g.moveTo(sx,sy-16*u); g.lineTo(sx+dx/dl*5*u,sy-16*u+dy/dl*5*u); g.stroke();
-  return 56*s+bob;
+  g.strokeStyle=trim; g.lineWidth=Math.max(1,(V?1.7+V.grade*.22:1.5)*u); g.beginPath();
+  g.moveTo(sx,sy-16*u); g.lineTo(sx+dx/dl*(V?7:5)*u,sy-16*u+dy/dl*(V?7:5)*u); g.stroke();
+  if(V&&V.grade>=4){ g.fillStyle=V.glow; g.fillRect(sx-1.5*u,sy-18.5*u,3*u,3*u); }
+  return (V&&V.crown?62:56)*s+bob;
 }
-function character(g,x,y,s,C,phase,moving,face,pose,lod){
+function character(g,x,y,s,C,phase,moving,face,pose,lod,V){
   lod=lod||0;
-  if(lod>=3) return characterCompact(g,x,y,s,C,phase,moving,face);
+  if(lod>=3) return characterCompact(g,x,y,s,C,phase,moving,face,V);
   const anim = moving && !REDUCE;
-  const sw   = anim ? Math.sin(phase) : 0;                 // 팔다리 스윙
-  const bob  = anim ? Math.abs(Math.sin(phase))*1.3*s : 0; // 상하 흔들림
-  const atk  = pose||0;                                    // 0=평상시, 1=공격자세(팔 앞으로)
+  const sw   = anim ? Math.sin(phase) : 0;
+  const bob  = anim ? Math.abs(Math.sin(phase))*1.3*s : 0;
+  const atk  = pose||0;
   const ca=Math.cos(face), sa=Math.sin(face);
+  if(V&&V.grade>=3&&lod<2&&!REDUCE){
+    const pulse=.5+.5*Math.sin(G.anim*(2.2+V.grade*.3)+phase);
+    screenEllipse(g,x,y,1,18+V.grade*2+pulse*2,18+V.grade*2+pulse*2,
+      V.glow+'18',V.glow+'66',Math.max(.7,1.1*CAM.scale));
+  }
   const P=[];
-  // (앞뒤 fx, 좌우 fy, 높이 z, 길이 len, 폭 wid, 높이 h, 색)
   const add=(fx,fy,z,len,wid,h,c)=>P.push({
     x:x+(fx*ca-fy*sa)*s, y:y+(fx*sa+fy*ca)*s, z:z*s, len:len*s, wid:wid*s, h:h*s, c});
 
   const legSw=sw*3.2, armSw=-sw*3.6;
-  // 다리 + 신발
   add( legSw, 4.2, 3.5, 6.5, 6.5, 16, C.leg);
   add(-legSw,-4.2, 3.5, 6.5, 6.5, 16, C.leg);
   if(lod<2){
-    add( legSw+1.0, 4.2, 0, 9.5, 6.8, 3.5, C.shoe);        // 발(앞쪽으로 조금 김)
+    add( legSw+1.0, 4.2, 0, 9.5, 6.8, 3.5, C.shoe);
     add(-legSw+1.0,-4.2, 0, 9.5, 6.8, 3.5, C.shoe);
   }
-  // 골반·몸통·어깨(위로 갈수록 넓어져 사람 실루엣)
-  if(lod<2) add(0,0,19.5+bob, 8.5, 14.5, 3.5, C.belt);     // 벨트
-  add(0,0,23+bob,   8.0, 15.5, 12, C.torso);               // 몸통(허리~가슴)
-  add(0,0,35+bob,   8.8, 19.0, 5.5, C.torso);              // 어깨(더 넓게)
-  if(lod<1) add(0,0,40.5+bob, 4.5, 5.0, 2.5, C.skin);      // 목
-  // 팔 + 손 (공격 자세면 앞으로 들어올림)
+  if(lod<2) add(0,0,19.5+bob, 8.5, 14.5, 3.5, C.belt);
+  add(0,0,23+bob,   8.0, 15.5, 12, C.torso);
+  add(0,0,35+bob,   8.8, 19.0, 5.5, C.torso);
+  if(lod<1) add(0,0,40.5+bob, 4.5, 5.0, 2.5, C.skin);
   const armF = atk?5.5:0, armZ = atk?26:21.5, sleeve=darken(C.torso,0.78);
-  add(armF+armSw, 10.8, armZ+bob, 6, 6, 14, sleeve);       // 왼팔(소매)
-  add(armF-armSw,-10.8, armZ+bob, 6, 6, 14, sleeve);       // 오른팔
+  add(armF+armSw, 10.8, armZ+bob, 6, 6, 14, sleeve);
+  add(armF-armSw,-10.8, armZ+bob, 6, 6, 14, sleeve);
   if(lod<1){
-    add(armF+armSw, 10.8, armZ-3.5+bob, 6, 6, 4, C.skin);  // 왼손
-    add(armF-armSw,-10.8, armZ-3.5+bob, 6, 6, 4, C.skin);  // 오른손
+    add(armF+armSw, 10.8, armZ-3.5+bob, 6, 6, 4, C.skin);
+    add(armF-armSw,-10.8, armZ-3.5+bob, 6, 6, 4, C.skin);
   }
-  // 머리 + 머리카락 + 눈 + 코
-  add(0,0,43+bob, 10.5, 11.5, 11, C.skin);                 // 머리
-  add(0,0,53+bob, 11.2, 12.2, 3.2, C.hair);                // 머리카락(윗면)
+  add(0,0,43+bob, 10.5, 11.5, 11, C.skin);
+  add(0,0,53+bob, 11.2, 12.2, 3.2, (V&&V.helmet)?V.dark:C.hair);
   if(lod<1){
-    add(-4.6,0,45.5+bob, 2.5, 11.8, 8.5, C.hair);          // 뒷머리
-    add(6.4,2.9,48.8+bob, 3.0, 2.9, 2.4, EYE_COL);         // 왼눈(얼굴 밖으로 충분히 돌출)
-    add(6.4,-2.9,48.8+bob, 3.0, 2.9, 2.4, EYE_COL);        // 오른눈
-    add(6.6,0,44.8+bob, 3.0, 2.8, 2.6, C.skin);            // 코
-    add(6.2,0,42.8+bob, 2.2, 5.0, 1.4, darken(C.skin,0.62)); // 입
+    add(-4.6,0,45.5+bob, 2.5, 11.8, 8.5, C.hair);
+    add(6.4,2.9,48.8+bob, 3.0, 2.9, 2.4, EYE_COL);
+    add(6.4,-2.9,48.8+bob, 3.0, 2.9, 2.4, EYE_COL);
+    add(6.6,0,44.8+bob, 3.0, 2.8, 2.6, C.skin);
+    add(6.2,0,42.8+bob, 2.2, 5.0, 1.4, darken(C.skin,0.62));
   }
-  if(C.horn && lod<2){                                     // 적 = 투구 뿔
+  if(C.horn && lod<2){
     add(1.5, 6.2, 55.5+bob, 2.6, 2.6, 4.5, C.horn);
     add(1.5,-6.2, 55.5+bob, 2.6, 2.6, 4.5, C.horn);
   }
+  // 등급별 장갑은 색뿐 아니라 흉갑·견갑·무릎·투구·동력 코어의 실루엣을 바꾼다.
+  if(V&&lod<2){
+    const flash=C.torso==='#ffffff'||C.torso==='#63b8ff',armorCol=flash?C.torso:V.armor;
+    add(5.1,0,26+bob,3.8+V.grade*.45,13.5+V.grade*.7,9+V.grade*.5,armorCol);
+    add(6.8,0,31+bob,2.4,8+V.grade*.7,2.6,V.trim);
+    if(V.shoulder){
+      add(1.2, 11.7,33+bob,8+V.variant,7.5,5+V.grade*.45,armorCol);
+      add(1.2,-11.7,33+bob,8+V.variant,7.5,5+V.grade*.45,armorCol);
+    }
+    if(V.grade>=2&&lod<1){
+      add(legSw+2.6, 4.2,12,4.5,7.2,5,V.trim);
+      add(-legSw+2.6,-4.2,12,4.5,7.2,5,V.trim);
+    }
+    if(V.helmet){
+      add(0,0,52+bob,12.5+V.grade*.35,13+V.grade*.35,4.2,armorCol);
+      add(5.8,0,48.5+bob,3,9+V.variant*1.5,3,V.trim);
+    }
+    if(V.reactor&&lod<1){
+      add(-5.7,0,27+bob,5.5,9,9,V.dark);
+      add(-8.7,0,30+bob,3.5,5.5,5.5,V.glow);
+    }
+    if(V.crown&&lod<1){
+      add(-1.5, 5.2,57+bob,3,3,8,V.trim);
+      add(-1.5,-5.2,57+bob,3,3,8,V.trim);
+    }
+    // 아군은 등급별 라이플, 적은 도끼→글레이브→보이드 블레이드로 무기 형상이 진화한다.
+    if(V.enemy){
+      const wl=15+V.grade*2.2,wy=-9.5;
+      add(9+wl*.34,wy,24+bob,wl,3.2+V.grade*.45,3.2+V.grade*.3,V.dark);
+      add(15+wl*.45,wy,24+bob,5+V.grade,7+V.grade*.8,2.5,V.trim);
+      if(V.grade>=3&&lod<1) add(11,wy,25+bob,5,5,5,V.glow);
+      if(V.boss&&lod<1){
+        add(-4, 15,32+bob,10,5,22,V.dark); add(-4,-15,32+bob,10,5,22,V.dark);
+      }
+    } else {
+      const wl=13+V.grade*2.4+V.variant*1.2,wy=-8.5;
+      add(11+wl*.34,wy,25+bob,wl,4+V.grade*.55,4+V.grade*.35,V.dark);
+      add(11,wy,26+bob,6.5,7+V.grade*.65,7+V.grade*.5,armorCol);
+      add(16+wl*.55,wy,25.5+bob,4+V.variant,5+V.grade*.45,5+V.grade*.4,V.trim);
+      if(V.grade>=2&&lod<1) add(12.5,wy,28+bob,4.5,4.5,4.5,V.glow);
+      if(V.grade>=4&&lod<1){
+        add(13+wl*.28,wy+5.5,25+bob,wl*.5,2.5,2.5,V.trim);
+        add(13+wl*.28,wy-5.5,25+bob,wl*.5,2.5,2.5,V.trim);
+      }
+    }
+  }
   P.sort((a,b)=> (depthOf(a.x,a.y)-depthOf(b.x,b.y)) || a.z-b.z);
   for(const p of P) rbox(g,p.x,p.y,p.z,p.len,p.wid,p.h,face,p.c);
-  return 56*s+bob;   // 머리 꼭대기 높이(HP바 위치용)
-}
-const ALLY_C ={skin:ALLY_SKIN, torso:ALLY_TORSO, leg:ALLY_LEG, hair:ALLY_HAIR, shoe:ALLY_SHOE, belt:ALLY_BELT};
+  return (V&&V.crown?64:56)*s+bob;
+}const ALLY_C ={skin:ALLY_SKIN, torso:ALLY_TORSO, leg:ALLY_LEG, hair:ALLY_HAIR, shoe:ALLY_SHOE, belt:ALLY_BELT};
 const ENEMY_C={skin:ENEMY_SKIN,torso:ENEMY_TORSO,leg:ENEMY_LEG, hair:ENEMY_HAIR, shoe:ENEMY_SHOE, belt:ENEMY_BELT, horn:'#e8d9c0'};
 function fixedPalette(base,overrides){ return Object.freeze(Object.assign({},base,overrides)); }
 const ALLY_FLASH_C=fixedPalette(ALLY_C,{torso:'#63b8ff'});
@@ -380,7 +428,7 @@ function enemyPalette(o){
   if(o.poisonT>0) return boss?ENEMY_BOSS_POISON_C:ENEMY_POISON_C;
   if(o.slowT>0) return boss?ENEMY_BOSS_SLOW_C:ENEMY_SLOW_C;
   if(o.weakT>0) return boss?ENEMY_BOSS_WEAK_C:ENEMY_WEAK_C;
-  return boss?ENEMY_BOSS_C:ENEMY_C;
+  return o.visual ? o.visual.palette : (boss?ENEMY_BOSS_C:ENEMY_C);
 }
 
 // ---- 네온 디오라마 조명·후처리 ----
