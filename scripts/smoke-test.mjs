@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { access, mkdtemp, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -33,12 +33,12 @@ await fetch(targetUrl, { cache: 'no-store' }).then(response => {
   if (!response.ok) throw new Error(`Game server returned ${response.status}`);
 });
 
-const port = 9333 + Math.floor(Math.random() * 500);
 const profile = await mkdtemp(join(tmpdir(), 'wave-arena-smoke-'));
 const browser = spawn(browserBin, [
   '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', '--disable-dev-shm-usage',
   '--no-first-run', '--no-default-browser-check',
-  `--remote-debugging-port=${port}`, '--remote-debugging-address=127.0.0.1',
+  '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
+  '--remote-allow-origins=*',
   `--user-data-dir=${profile}`,
   '--window-size=844,390', targetUrl,
 ], { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -79,13 +79,19 @@ const evaluate = async (expression, awaitPromise = false) => {
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
 
 try {
-  let targets;
+  let targets, port;
   for (let attempt = 0; attempt < 100; attempt++) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/list`);
-      if (response.ok) {
-        targets = await response.json();
-        if (targets.some(target => target.type === 'page')) break;
+      if (!port) {
+        const activePort = await readFile(join(profile, 'DevToolsActivePort'), 'utf8');
+        port = Number(activePort.split(/\r?\n/, 1)[0]);
+      }
+      if (port) {
+        const response = await fetch(`http://127.0.0.1:${port}/json/list`);
+        if (response.ok) {
+          targets = await response.json();
+          if (targets.some(target => target.type === 'page')) break;
+        }
       }
     } catch {}
     await wait(100);
