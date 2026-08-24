@@ -15,7 +15,7 @@ Canonical config: quality-gates.json
 
 ## Performance scene
 
-844×390, DPR 1.5에서 적 60마리와 정상 구매 경로로 배치 가능한 최고 등급 구조물을 최대한 채운다. 기본 CPU와 DevTools 4배 CPU 제한을 각각 계측한다. FPS만 보지 않고 p95 frame time과 long-frame 비율을 함께 판정한다. 이 장면은 고밀도 LOD의 발동 조건도 검증하며, 평상시 렌더 품질과 분리된 최악 부하 예산으로 관리한다.
+844×390, DPR 1.5에서 적 60마리와 정상 구매 경로로 배치 가능한 최고 등급 구조물을 최대한 채운다. 기본 CPU와 DevTools 4배 CPU 제한을 각각 계측한다. FPS만 보지 않고 p95 frame time과 long-frame 비율을 함께 판정한다. 이 장면은 고밀도 LOD와 내부 DPR 1.25 상한의 발동도 검증하며, 평상시 렌더 품질과 분리된 최악 부하 예산으로 관리한다.
 
 CPU 제한은 실제 휴대폰 인증을 대체하지 않는다. 릴리스 후보는 중급 Android와 iPhone 가로 모드에서 10분 soak를 별도 수행한다.
 

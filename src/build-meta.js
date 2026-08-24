@@ -1,7 +1,7 @@
 (function(root){
   const meta={
-    buildId:'2026.08.25-performance-hardening',
-    cacheVersion:'wave-arena-v5-performance-20260825',
+    buildId:'2026.08.25-adaptive-rendering',
+    cacheVersion:'wave-arena-v6-adaptive-20260825',
     precache:[
       './',
       './index.html',

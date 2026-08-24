@@ -62,6 +62,9 @@ try {
   assert(load.enemies === budget.enemyCount, 'Performance enemy load was not created.');
   assert(load.turrets >= budget.minStructures, 'Performance structure load is too small: ' + load.turrets);
   await wait(700);
+  const renderMode=await browser.evaluate('({dense:RENDER_DENSE,dpr:DPR,backingWidth:c.width,backingHeight:c.height})');
+  assert(renderMode.dense && renderMode.dpr <= budget.maxDenseDpr,
+    'Dense rendering contract did not activate: ' + JSON.stringify(renderMode));
 
   const normal = await sample();
   assert(normal.fps >= budget.normal.minFps, 'Normal max-load FPS failed: ' + normal.fps.toFixed(1));
@@ -83,6 +86,7 @@ try {
     viewport:budget.viewport,
     budget,
     load,
+    renderMode,
     baseline,
     normal,
     cpu4x
