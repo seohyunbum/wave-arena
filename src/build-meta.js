@@ -1,7 +1,7 @@
 (function(root){
   const meta={
-    buildId:'2026.08.25-pwa-resilient',
-    cacheVersion:'wave-arena-v7-pwa-20260825',
+    buildId:'2026.08.25-visual-evolution',
+    cacheVersion:'wave-arena-v8-visual-evolution-20260825',
     precache:[
       './',
       './index.html',

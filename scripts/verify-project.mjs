@@ -19,19 +19,21 @@ const sw = await read('sw.js');
 assert(meta && meta.buildId && meta.cacheVersion, 'Build metadata is incomplete.');
 assert(agents === claude, 'AGENTS.md and CLAUDE.md drifted.');
 assert(!/<script(?![^>]*\bsrc=)[^>]*>/i.test(index), 'Inline script found in index.html.');
-for (const source of ['src/build-meta.js', 'src/game/runtime.js', 'src/game/config.js', 'src/game/render.js', 'src/game.js', 'src/game/ui.js', 'src/platform/pwa.js']) {
+for (const source of ['src/build-meta.js', 'src/game/runtime.js', 'src/game/config.js', 'src/game/visual-system.js', 'src/game/render.js', 'src/game.js', 'src/game/ui.js', 'src/platform/pwa.js']) {
   assert(index.includes('src="' + source + '"'), 'Script order is missing ' + source);
 }
 assert(readme.includes(meta.buildId), 'README build ID drifted from build metadata.');
 assert(sw.includes('WA_BUILD_META.cacheVersion') && sw.includes('WA_BUILD_META.precache'),
   'Service worker is not using canonical build metadata.');
 assert(gates.viewports.length === 4, 'Four canonical viewports are required.');
-assert(gates.flows.includes('offline-navigation') && gates.flows.includes('save-restore'),
+assert(gates.flows.includes('offline-navigation') && gates.flows.includes('save-restore') && gates.flows.includes('visual-upgrade-progression'),
   'Critical flow gates are missing.');
 assert(gates.performance.normal.minFps > gates.performance.cpu4x.minFps,
   'Performance budgets are not ordered by CPU profile.');
 assert(gates.performance.maxDenseDpr > 0 && gates.performance.maxDenseDpr < gates.performance.viewport.dpr,
   'Dense DPR cap must be lower than the performance viewport DPR.');
+assert(gates.performance.detailEnemyCount > 0 && gates.performance.detailEnemyCount < gates.performance.enemyCount,
+  'High-detail performance load must stay below the dense-scene threshold.');
 
 for (const asset of meta.precache) {
   if (asset === './') continue;

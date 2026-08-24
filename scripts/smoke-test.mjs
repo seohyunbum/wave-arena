@@ -83,6 +83,8 @@ try {
     'return {before,moved,merged,saved,restored,restoredState,stopped:G.phase==="paused"&&G.enemies.length===0&&G.stopCd===CFG.stopCooldown};' +
   '})()');
 
+  const visuals = await browser.evaluate('visualContractSnapshot()');
+
   const assets = await browser.evaluate('Promise.all(Object.values(SFX_FILES).map(async url=>{' +
     'const response=await fetch(url); return {url,status:response.status,type:response.headers.get("content-type")};' +
   '}))', true);
@@ -124,6 +126,20 @@ try {
     gameplay.restoredState.gold === 123456 && gameplay.restoredState.turrets === 1 &&
     gameplay.restoredState.tier === 1, 'Save/restore contract failed.');
   assert(gameplay.stopped, 'Stop flow failed.');
+  assert(visuals.version === '2.0.0', 'Visual system version is missing.');
+  const unique = values => new Set(values).size === values.length;
+  assert(visuals.ally.length === gates.visuals.allyRanks && unique(visuals.ally),
+    'Ally evolution stages are not distinct.');
+  assert(visuals.base.length === gates.visuals.baseRanks && unique(visuals.base),
+    'Every base upgrade must have a unique visual signature.');
+  assert(visuals.turret.length === gates.visuals.turretRanks && unique(visuals.turret),
+    'Every standard turret tier must have a unique visual signature.');
+  assert(unique(visuals.rapid) && unique(visuals.laser) && unique(visuals.launcher),
+    'A specialist structure reuses an upgrade signature.');
+  assert(visuals.projectileShapes.length === gates.visuals.projectileArchetypes && unique(visuals.projectileShapes),
+    'Projectile archetypes do not visibly evolve across grades.');
+  assert(visuals.maxProjectileLayers <= gates.visuals.maxProjectileLayers,
+    'Projectile layer budget exceeds the mobile performance contract.');
   assert(assets.length === 6 && assets.every(asset => asset.status === 200), 'A CC0 audio file failed.');
   assert(pwa.active && pwa.controller && pwa.script.endsWith('/sw.js'),
     'Service worker did not control the page: ' + JSON.stringify(pwa.diagnostic));
@@ -171,6 +187,7 @@ try {
     rotation,
     audio,
     gameplay,
+    visuals,
     pwa: { active: pwa.active, controller: pwa.controller, cached: pwa.cached.length, diagnostic: pwa.diagnostic },
     offline,
     reduced,
