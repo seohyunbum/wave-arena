@@ -152,6 +152,25 @@ function updateShop(){
     + lch.map(t=>'<span class="tchip">⚡ Lv'+(t.tier+1)+' 발사기 <b>'+(t.coilT>0?Math.ceil(t.coilT)+'초':'코일 없음')+'</b></span>').join('');
   document.getElementById('turList').innerHTML = chips || '<span class="tchip">보유 구조물 없음</span>';
 
+  // 특성
+  for(const t of CFG.traits){
+    const b=document.getElementById('buyTrait_'+t.id);
+    const own=hasTrait(t.id), open=traitUnlocked(t);
+    b.className='buy tr'+(own?' own':(open?'':' lock'));
+    b.style.borderLeft='4px solid '+t.col;
+    b.innerHTML='<div class="tn">'+t.ic+' '+t.n+(own?' ✅':'')+'</div>'
+      +'<div class="td">'+(open||own ? t.desc : TRAIT[t.parent].n+'을(를) 먼저 얻어야 열립니다')+'</div>'
+      +'<div class="td">'+(own?'보유 중':'💰'+t.cost.toLocaleString())+'</div>';
+    b.disabled = own || !open || G.gold<t.cost;
+  }
+  {
+    const owned=CFG.traits.filter(t=>hasTrait(t.id));
+    document.getElementById('traitInfo').innerHTML = owned.length
+      ? '보유 특성 : '+owned.map(t=>'<span class="tchip">'+t.ic+' '+t.n+'</span>').join('')
+        +' · 여러 개를 가지면 각각 따로 발동합니다.'
+      : '아직 특성이 없습니다. 물·불·바람·땅 중 하나를 먼저 얻으세요.';
+  }
+
   // 연사 포탑
   for(let i=0;i<CFG.rapidTiers.length;i++){
     const R=CFG.rapidTiers[i], b=document.getElementById('buyRap_'+i), c=rapidCost(i);
@@ -522,6 +541,19 @@ document.getElementById('shopClose').onclick=closeShop;
   });
 })();
 document.getElementById('mergeTurret').onclick=()=>{ autoMerge(); updateShop(); };
+(function buildTraitShop(){                      // 특성 : 기본 원소 한 줄 + 그 아래 두 갈래
+  const grid=document.getElementById('traitGrid');
+  for(const base of CFG.traits.filter(t=>!t.parent)){
+    const row=document.createElement('div'); row.className='trrow';
+    for(const t of [base, ...CFG.traits.filter(k=>k.parent===base.id)]){
+      const b=document.createElement('button');
+      b.id='buyTrait_'+t.id; b.className='buy tr'; b.style.whiteSpace='normal';
+      b.onclick=()=>buyTrait(t.id);
+      row.appendChild(b);
+    }
+    grid.appendChild(row);
+  }
+})();
 (function buildRapidShop(){                      // 레벨별 연사 포탑 구매 버튼
   const grid=document.getElementById('rapBuyGrid');
   CFG.rapidTiers.forEach((R,i)=>{

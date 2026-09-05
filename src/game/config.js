@@ -179,6 +179,42 @@ const CFG = {
   healDollFrac:0.8,                                  // 치유인형 회복률(완전회복 → 80%)
   rageDur:8, rageDmg:1.5, rageFire:0.65,             // 분노: 지속·공격력배율·공격간격배율(↓=빠름)
   luckDur:10, luckMult:2, guardDur:8, guardDef:100,  // 행운: 지속·골드배율 / 수호: 지속·추가방어
+  // ---- 특성(원소) : 한 번 사면 영구히 남는다 ----
+  // 공격이 적을 맞힐 때마다 확률로 원소 공격이 터진다.
+  //  · 기본 4종(물·불·바람·땅) = 맞은 그 적에게만 "물약"급 효과
+  //  · 기본을 사면 두 갈래가 열린다 : 같은 원소의 강화판 / 새 원소(전체에 "인형"급 효과)
+  // 전체 효과는 연사 포탑처럼 초당 수십 번 때리는 무기와 만나면 무한 발동이 되므로
+  // 반드시 재사용 대기시간을 둔다. 화상도 최대체력 비율이 아닌 고정 피해로 준다.
+  traitBurnFrac:0.5,                                 // 불 특성 화상 = 그 공격 피해의 비율(초당)
+  traits:[
+    {id:'water', n:'물',   ic:'💧', col:'#5ce1ff', parent:null,    cost:30000,  prob:0.05,
+     desc:'5% 확률로 물 공격 — 맞은 적이 빙결 3초 (빙결 물약과 같은 효과)'},
+    {id:'tide',  n:'해일', ic:'🌊', col:'#38b6ff', parent:'water', cost:150000, prob:0.12,
+     desc:'더 강한 물 · 12% 확률 — 맞은 적이 빙결 5초'},
+    {id:'ice',   n:'얼음', ic:'❄️', col:'#bfe9ff', parent:'water', cost:260000, prob:0.05, cd:14,
+     desc:'5% 확률로 얼음 공격 — 모든 적이 빙결 3.2초 (빙결 인형과 같은 효과) · 14초마다 한 번'},
+
+    {id:'fire',  n:'불',   ic:'🔥', col:'#ff8a3a', parent:null,   cost:30000,  prob:0.05,
+     desc:'5% 확률로 불 공격 — 맞은 적이 화상 3초'},
+    {id:'blaze', n:'폭염', ic:'☄️', col:'#ff5a2a', parent:'fire', cost:150000, prob:0.12,
+     desc:'더 강한 불 · 12% 확률 — 맞은 적이 더 센 화상 5초'},
+    {id:'lava',  n:'용암', ic:'🌋', col:'#ff3b1f', parent:'fire', cost:260000, prob:0.05, cd:12,
+     desc:'5% 확률로 용암 공격 — 모든 적이 화상 (화염 인형과 같은 효과) · 12초마다 한 번'},
+
+    {id:'wind',  n:'바람', ic:'🌪', col:'#9df0ff', parent:null,   cost:30000,  prob:0.05,
+     desc:'5% 확률로 바람 공격 — 맞은 적이 감속 5초 (감속 물약과 같은 효과)'},
+    {id:'gale',  n:'폭풍', ic:'🌀', col:'#7cf3c8', parent:'wind', cost:150000, prob:0.12,
+     desc:'더 강한 바람 · 12% 확률 — 맞은 적이 감속 8초'},
+    {id:'bolt',  n:'번개', ic:'⚡', col:'#ffe066', parent:'wind', cost:260000, prob:0.05, cd:13,
+     desc:'5% 확률로 번개 공격 — 모든 적이 감속 5초 + 약화 6초 · 13초마다 한 번'},
+
+    {id:'earth', n:'땅',   ic:'🪨', col:'#c08a4a', parent:null,    cost:30000,  prob:0.05,
+     desc:'5% 확률로 땅 공격 — 맞은 적이 약화 6초 (약화 물약과 같은 효과)'},
+    {id:'quake', n:'지진', ic:'⛰', col:'#a9743a', parent:'earth', cost:150000, prob:0.12,
+     desc:'더 강한 땅 · 12% 확률 — 맞은 적이 약화 9초 + 감속 4초'},
+    {id:'metal', n:'금속', ic:'⚙️', col:'#c9d3e0', parent:'earth', cost:260000, prob:0.05, cd:16,
+     desc:'5% 확률로 금속 공격 — 모든 적이 즉시 최대체력 5% 피해 · 16초마다 한 번'},
+  ],
   dolls:[{key:'revive',  n:'부활인형', desc:'죽은 아군 전원 부활(HP 40%)', cost:20000},
          {key:'heal',    n:'치유인형', desc:'아군 전원 HP 80% 회복', cost:9000},
          {key:'flame',   n:'화염인형', desc:'모든 적에게 화상·5초', cost:7000},
