@@ -6,6 +6,7 @@ const G = {
   allies:[], enemies:[], shots:[], fx:[], nums:[], beams:[], rings:[],
   turrets:[], turretsBought:0, selTurret:null, stopCd:0, maxLevelSeen:1, anim:0, dropInfo:null, shake:0,
   launchersBought:0, coilsUsed:0, lasersBought:0, rapidsBought:0, pathIndex:0, potBought:{}, dollBought:{},
+  traits:[], traitCd:{},                        // 보유한 특성 id 목록 / 전체효과 특성의 남은 대기시간
   lastCp:null, cpList:[],
 };
 
@@ -77,6 +78,7 @@ function reset(){
   G.levelOffset=0; G.buffs.rageT=0; G.buffs.luckT=0; G.buffs.guardT=0;
   G.turrets=[]; G.turretsBought=0; G.selTurret=null; G.stopCd=0; G.maxLevelSeen=1;
   G.launchersBought=0; G.coilsUsed=0; G.lasersBought=0; G.rapidsBought=0; G.potBought={}; G.dollBought={};
+  G.traits=[]; G.traitCd={};
   G.allies=[]; for(let i=0;i<CFG.allyStart;i++) G.allies.push(newAlly());
   G.lastCp=null; G.cpList=[];
   hideBossLog();
@@ -97,7 +99,7 @@ function snapshot(){
     pathIndex:G.pathIndex, maxLevelSeen:G.maxLevelSeen, levelOffset:G.levelOffset,
     nextBossLevel:G.nextBossLevel, stopCd:G.stopCd,
     turretsBought:G.turretsBought, launchersBought:G.launchersBought, coilsUsed:G.coilsUsed,
-    lasersBought:G.lasersBought, rapidsBought:G.rapidsBought,
+    lasersBought:G.lasersBought, rapidsBought:G.rapidsBought, traits:G.traits.slice(),
     potBought:Object.assign({},G.potBought), dollBought:Object.assign({},G.dollBought),
     buffs:Object.assign({},G.buffs),
     allies:G.allies.map(a=>({hp:a.hp, dead:a.dead})),
@@ -121,6 +123,8 @@ function restore(s){
   G.nextBossLevel=s.nextBossLevel||CFG.bossEvery; G.stopCd=s.stopCd||0;
   G.turretsBought=s.turretsBought||0; G.launchersBought=s.launchersBought||0; G.coilsUsed=s.coilsUsed||0;
   G.lasersBought=s.lasersBought||0; G.rapidsBought=s.rapidsBought||0;
+  // 스키마 v3 하위 호환 : 특성이 없던 저장본은 빈 목록으로 시작한다
+  G.traits=(s.traits||[]).filter(id=>TRAIT[id]); G.traitCd={};
   G.potBought=Object.assign({},s.potBought||{}); G.dollBought=Object.assign({},s.dollBought||{});
   if(s.buffs){ G.buffs.rageT=s.buffs.rageT||0; G.buffs.luckT=s.buffs.luckT||0; G.buffs.guardT=s.buffs.guardT||0; }
   G.level=Math.max(1, levelFor(G.time)-G.levelOffset);
@@ -522,6 +526,54 @@ function nearestEnemy(x,y,range){
   for(const e of G.enemies){ const d=(e.x-x)**2+(e.y-y)**2; if(d<bd){bd=d;best=e;} }
   return best;
 }
+// ================= 특성(원소) =================
+const TRAIT={}; for(const t of CFG.traits) TRAIT[t.id]=t;
+function hasTrait(id){ return G.traits.indexOf(id)>=0; }
+function traitUnlocked(t){ return !t.parent || hasTrait(t.parent); }   // 부모를 사야 열린다
+function buyTrait(id){
+  const t=TRAIT[id]; if(!t || G.phase==='over') return;
+  if(hasTrait(id)){ floatText(baseNode().x,baseNode().y,'이미 가진 특성입니다','#ff8a97'); return; }
+  if(!traitUnlocked(t)){
+    floatText(baseNode().x,baseNode().y,TRAIT[t.parent].n+' 특성을 먼저 얻어야 합니다','#ff8a97'); return; }
+  if(G.gold<t.cost) return;
+  G.gold-=t.cost; G.traits.push(id);
+  floatText(baseNode().x,baseNode().y, t.ic+' '+t.n+' 특성 획득!', t.col, 1.6);
+  burst(baseNode().x,baseNode().y,t.col,20);
+  updateShop();
+}
+// 전체(인형급) 효과 — 모든 적에게 걸리므로 대기시간으로 묶어 둔다
+function traitAll(t, fn){
+  let n=0; for(const e of G.enemies){ if(e.dead) continue; fn(e); n++; }
+  if(n) floatText(baseNode().x,baseNode().y, t.ic+' '+t.n+' → 적 '+n+'마리!', t.col, 1.3);
+}
+// 공격이 적을 맞힐 때마다 호출 (아군·포탑·연사 포탑 전부. 레이저는 지속 피해라 제외)
+function procTraits(e,dmg){
+  if(!G.traits.length) return;
+  for(const id of G.traits){
+    const t=TRAIT[id];
+    if(Math.random()>=t.prob) continue;
+    if(t.cd){ if((G.traitCd[id]||0)>0) continue; G.traitCd[id]=t.cd; }
+    switch(id){
+      // ---- 기본 4종 : 맞은 그 적에게만 (물약급) ----
+      case 'water': e.freezeT=Math.max(e.freezeT,3); break;
+      case 'tide':  e.freezeT=Math.max(e.freezeT,5); break;
+      case 'fire':  e.burnT=Math.max(e.burnT,3);
+                    e.burnDps=Math.max(e.burnDps||0, dmg*CFG.traitBurnFrac); break;
+      case 'blaze': e.burnT=Math.max(e.burnT,5);
+                    e.burnDps=Math.max(e.burnDps||0, dmg*CFG.traitBurnFrac*1.8); break;
+      case 'wind':  e.slowT=Math.max(e.slowT,5); break;
+      case 'gale':  e.slowT=Math.max(e.slowT,8); break;
+      case 'earth': e.weakT=Math.max(e.weakT,6); break;
+      case 'quake': e.weakT=Math.max(e.weakT,9); e.slowT=Math.max(e.slowT,4); break;
+      // ---- 파생 원소 : 모든 적에게 (인형급) ----
+      case 'ice':   traitAll(t, x=>{ x.freezeT=Math.max(x.freezeT,CFG.freezeDollDur); }); break;
+      case 'lava':  traitAll(t, x=>{ x.burnT=Math.max(x.burnT,3); x.burnPct=Math.max(x.burnPct||0,0.02); }); break;
+      case 'bolt':  traitAll(t, x=>{ x.slowT=Math.max(x.slowT,5); x.weakT=Math.max(x.weakT,6); }); break;
+      case 'metal': traitAll(t, x=>{ x.hp-=x.maxHp*0.05; if(x.hp<=0) x.dead=true; }); break;
+    }
+    if(!t.cd) floatText(e.x,e.y, t.ic, t.col, 0.6);      // 단일 효과는 작게 표시
+  }
+}
 function hitEnemy(e,dmg,p,direct){
   e.hp-=dmg; e.flash=.12;
   if(p){ if(p.burn){ e.burnT=Math.max(e.burnT,p.burn);
@@ -693,6 +745,7 @@ function update(dt){
         const cx=p.target.x, cy=p.target.y;
         if(p.src){ p.src.dealt+=p.dmg; hitEnemy(p.target,p.dmg,p,false); }  // 연사탄은 숫자를 모아서
         else hitEnemy(p.target,p.dmg,p,true);
+        if(!p.target.dead) procTraits(p.target,p.dmg);   // 특성(원소) 발동
         if(p.splash>0){ const r2=p.splash*p.splash;
           for(const e of G.enemies){ if(e===p.target||e.dead) continue;
             if((e.x-cx)**2+(e.y-cy)**2<=r2) hitEnemy(e,p.dmg*CFG.turretSplashFrac,p,false); }
@@ -703,6 +756,7 @@ function update(dt){
     retainInPlace(G.shots,keepShot);
   }
 
+  if(active) for(const id in G.traitCd){ if(G.traitCd[id]>0) G.traitCd[id]-=dt; }
   if(active) for(const e of G.enemies){
     if(e.dead) continue; if(e.flash>0) e.flash-=dt;
     // 디버프 처리
