@@ -99,6 +99,11 @@ function openShop(){ if(G.phase==='over') return; G.shopOpen=true;
   document.getElementById('shop').style.display='grid'; updateShop(); }
 function closeShop(){ G.shopOpen=false; document.getElementById('shop').style.display='none'; }
 function updateShop(){
+  // 상점이 닫혀 있으면 아무것도 그리지 않는다. 이 함수는 골드 변동·설치·합체·판매 등
+  // 13곳에서 불리고 전투 중에도 계속 도는데, 만지는 요소는 전부 #shop 안이라
+  // 닫혀 있는 동안의 갱신은 화면에 보이지도 않으면서 프레임만 먹는다.
+  // (여는 쪽 openShop() 이 곧바로 updateShop() 을 부르므로 열 때 최신 상태가 된다.)
+  if(!G.shopOpen) return;
   document.getElementById('shopGold').textContent=Math.floor(G.gold);
   // 포탑 : 등급별 직접 구매 버튼
   const full=isKindFull('turret');            // 포탑 칸 전용 (레이저·발사기는 각자 따로)
@@ -153,17 +158,26 @@ function updateShop(){
   document.getElementById('turList').innerHTML = chips || '<span class="tchip">보유 구조물 없음</span>';
 
   // 특성
+  // 특성 버튼은 buildTraitShop 이 만들어 둔 자식 노드에 **글자만** 갈아 끼운다.
+  // 예전엔 12개 버튼마다 innerHTML 을 통째로 다시 썼는데, 그건 매번 파싱 + 레이아웃
+  // 무효화라 프레임 예산을 통째로 먹었다(실측 p95 7.1ms → 28.0ms · fps 141 → 90).
   for(const t of CFG.traits){
     const b=document.getElementById('buyTrait_'+t.id);
     const own=hasTrait(t.id), open=traitUnlocked(t);
-    b.className='buy tr'+(own?' own':(open?'':' lock'));
-    b.style.borderLeft='4px solid '+t.col;
-    b.innerHTML='<div class="tn">'+t.ic+' '+t.n+(own?' ✅':'')+'</div>'
-      +'<div class="td">'+(open||own ? t.desc : TRAIT[t.parent].n+'을(를) 먼저 얻어야 열립니다')+'</div>'
-      +'<div class="td">'+(own?'보유 중':'💰'+t.cost.toLocaleString())+'</div>';
-    b.disabled = own || !open || G.gold<t.cost;
+    const dis = own || !open || G.gold<t.cost;
+    const sig = (own?1:0)+'|'+(open?1:0)+'|'+(dis?1:0);
+    if(b._sig!==sig){                                   // 상태가 그대로면 DOM 을 건드리지 않는다
+      b._sig=sig;
+      b.className='buy tr'+(own?' own':(open?'':' lock'));
+      b.style.borderLeft='4px solid '+t.col;
+      b._tn.textContent=t.ic+' '+t.n+(own?' ✅':'');
+      b._desc.textContent=(open||own ? t.desc : TRAIT[t.parent].n+'을(를) 먼저 얻어야 열립니다');
+      b._cost.textContent=(own?'보유 중':'💰'+t.cost.toLocaleString());
+      b.disabled=dis;
+    }
   }
-  {
+  if(G._traitInfoSig !== G.traits.join(',')){
+    G._traitInfoSig = G.traits.join(',');
     const owned=CFG.traits.filter(t=>hasTrait(t.id));
     document.getElementById('traitInfo').innerHTML = owned.length
       ? '보유 특성 : '+owned.map(t=>'<span class="tchip">'+t.ic+' '+t.n+'</span>').join('')
@@ -548,6 +562,11 @@ document.getElementById('mergeTurret').onclick=()=>{ autoMerge(); updateShop(); 
     for(const t of [base, ...CFG.traits.filter(k=>k.parent===base.id)]){
       const b=document.createElement('button');
       b.id='buyTrait_'+t.id; b.className='buy tr'; b.style.whiteSpace='normal';
+      // 자식 3개를 여기서 한 번만 만든다 — 갱신은 textContent 로만 한다(위 updateShop 참조).
+      b._tn=document.createElement('div');   b._tn.className='tn';
+      b._desc=document.createElement('div'); b._desc.className='td';
+      b._cost=document.createElement('div'); b._cost.className='td';
+      b.appendChild(b._tn); b.appendChild(b._desc); b.appendChild(b._cost);
       b.onclick=()=>buyTrait(t.id);
       row.appendChild(b);
     }
