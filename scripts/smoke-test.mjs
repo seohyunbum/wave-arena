@@ -176,6 +176,45 @@ try {
     'return {reduce:REDUCE,particles:G.fx.length};' +
   '})()');
   assert(reduced.reduce && reduced.particles <= 3, 'Reduced-motion particle gate failed.');
+
+  // ---- 프레임 루프 생존 -----------------------------------------------------
+  // 배포본 실측 결함(2026-09-06): 창 높이가 0이 되면 fitCamera 가 음수 배율을 내고
+  // ctx.ellipse 가 IndexSizeError 를 던졌다. frame() 이 마지막 줄에서 rAF 를 예약하던 탓에
+  // 그 한 번으로 루프가 영구히 죽어 검은 화면만 남았다. 둘 다 실측으로 잠근다.
+  const MUTATION_MARK = 'WA_SMOKE_FRAME_MUTATION';
+
+  // (a) 어떤 창 크기에서도 배율은 양수다 — 패딩(32px)보다 작은 24x24 로 직접 줄여서 잰다
+  await browser.setViewport({ name: 'degenerate', width: 24, height: 24, dpr: 1 });
+  await wait(250);
+  const tinyView = await browser.evaluate('(() => { resize(); return {scale:CAM.scale,w:c.clientWidth,h:c.clientHeight}; })()');
+  await browser.setViewport(gates.viewports[0]);
+  await wait(250);
+  const wideView = await browser.evaluate('(() => { resize(); return {scale:CAM.scale}; })()');
+
+  // (b) 한 프레임이 예외를 던져도 다음 프레임이 계속 돈다 — 실제로 한 번 던져서 확인한다
+  const resilience = await browser.evaluate('(() => {' +
+    'const proto=CanvasRenderingContext2D.prototype, real=proto.ellipse; let fired=false;' +
+    'proto.ellipse=function(){ if(!fired){ fired=true; throw new Error("' + MUTATION_MARK + '"); }' +
+      'return real.apply(this,arguments); };' +
+    'const errorsBefore=FRAME_ERRORS, animBefore=G.anim;' +
+    'return new Promise(done=>setTimeout(()=>{ proto.ellipse=real;' +
+      'done({fired,errors:FRAME_ERRORS-errorsBefore,advanced:G.anim>animBefore,drawing:CAM.scale>0});' +
+    '},500));' +
+  '})()', true);
+
+  assert(tinyView.scale > 0, '창을 24x24 로 줄이자 카메라 배율이 양수가 아니다: ' + JSON.stringify(tinyView));
+  assert(wideView.scale > 0.05, '창을 되돌린 뒤 배율이 복구되지 않았다: ' + JSON.stringify(wideView));
+  assert(resilience.fired, '변이(일부러 던진 예외)가 실행되지 않아 이 검사는 아무것도 증명하지 못한다.');
+  assert(resilience.errors === 1 && resilience.advanced && resilience.drawing,
+    '한 프레임의 예외가 루프를 죽였다: ' + JSON.stringify(resilience));
+
+  // 위 (b)는 일부러 던진 예외다. 표식이 붙은 것만 걷어내고 나머지는 그대로 판정한다.
+  const dropMutation = list => {
+    for (let i = list.length - 1; i >= 0; i--) if (list[i].includes(MUTATION_MARK)) list.splice(i, 1);
+  };
+  dropMutation(browser.exceptions);
+  dropMutation(browser.errorLogs);
+
   assert(browser.exceptions.length === 0, 'Runtime exceptions: ' + browser.exceptions.join(' | '));
   assert(browser.errorLogs.length === 0, 'Browser errors: ' + browser.errorLogs.join(' | '));
 
@@ -191,6 +230,8 @@ try {
     pwa: { active: pwa.active, controller: pwa.controller, cached: pwa.cached.length, diagnostic: pwa.diagnostic },
     offline,
     reduced,
+    tinyView,
+    resilience,
     exceptions: browser.exceptions,
     errorLogs: browser.errorLogs
   }, null, 2));

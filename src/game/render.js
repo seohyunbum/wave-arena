@@ -188,7 +188,11 @@ function fitCamera(){
     if(sy-Z_HEAD<minY)minY=sy-Z_HEAD; if(sy>maxY)maxY=sy;
   }
   const pad=16;
-  CAM.scale=Math.min((W-pad*2)/(maxX-minX), (H-pad*2)/(maxY-minY));
+  // 창이 패딩(32px)보다 좁거나 낮아지면 분자가 음수가 되어 배율이 뒤집힌다.
+  // 뒤집힌 배율은 모든 반지름을 음수로 만들고 ctx.ellipse 가 IndexSizeError 를 던진다
+  // (창 최소화·복원으로 clientHeight 가 0 이 되는 경로에서 실측됨).
+  // 담을 수 없을 만큼 작은 창은 아주 작게 그리는 게 맞지, 뒤집는 게 아니다.
+  CAM.scale=Math.max(1e-3, Math.min((W-pad*2)/(maxX-minX), (H-pad*2)/(maxY-minY)));
   CAM.ox=W/2-((minX+maxX)/2)*CAM.scale;
   CAM.oy=H/2-((minY+maxY)/2)*CAM.scale;
 }
