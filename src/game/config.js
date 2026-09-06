@@ -185,34 +185,38 @@ const CFG = {
   //  · 기본을 사면 두 갈래가 열린다 : 같은 원소의 강화판 / 새 원소(전체에 "인형"급 효과)
   // 전체 효과는 연사 포탑처럼 초당 수십 번 때리는 무기와 만나면 무한 발동이 되므로
   // 반드시 재사용 대기시간을 둔다. 화상도 최대체력 비율이 아닌 고정 피해로 준다.
+  // 가격 : 한 번 사면 모든 공격에 영구히 붙는 전역 효과라 후반 대형 투자로 잡는다.
+  //   기본 800만 · 강화판 6,000만 · 새 원소 1억 8,000만
+  //   한 갈래(기본+강화+새 원소) 2억 4,800만 ~= Lv124 누적 수입
+  //   12종 전부 9억 9,200만 ~= Lv145 누적 수입 (Lv15 창조 포탑 8,146만의 약 12배)
   traitBurnFrac:0.5,                                 // 불 특성 화상 = 그 공격 피해의 비율(초당)
   traits:[
-    {id:'water', n:'물',   ic:'💧', col:'#5ce1ff', parent:null,    cost:30000,  prob:0.05,
+    {id:'water', n:'물',   ic:'💧', col:'#5ce1ff', parent:null,    cost:8000000,  prob:0.05,
      desc:'5% 확률로 물 공격 — 맞은 적이 빙결 3초 (빙결 물약과 같은 효과)'},
-    {id:'tide',  n:'해일', ic:'🌊', col:'#38b6ff', parent:'water', cost:150000, prob:0.12,
+    {id:'tide',  n:'해일', ic:'🌊', col:'#38b6ff', parent:'water', cost:60000000, prob:0.12,
      desc:'더 강한 물 · 12% 확률 — 맞은 적이 빙결 5초'},
-    {id:'ice',   n:'얼음', ic:'❄️', col:'#bfe9ff', parent:'water', cost:260000, prob:0.05, cd:14,
+    {id:'ice',   n:'얼음', ic:'❄️', col:'#bfe9ff', parent:'water', cost:180000000, prob:0.05, cd:14,
      desc:'5% 확률로 얼음 공격 — 모든 적이 빙결 3.2초 (빙결 인형과 같은 효과) · 14초마다 한 번'},
 
-    {id:'fire',  n:'불',   ic:'🔥', col:'#ff8a3a', parent:null,   cost:30000,  prob:0.05,
+    {id:'fire',  n:'불',   ic:'🔥', col:'#ff8a3a', parent:null,   cost:8000000,  prob:0.05,
      desc:'5% 확률로 불 공격 — 맞은 적이 화상 3초'},
-    {id:'blaze', n:'폭염', ic:'☄️', col:'#ff5a2a', parent:'fire', cost:150000, prob:0.12,
+    {id:'blaze', n:'폭염', ic:'☄️', col:'#ff5a2a', parent:'fire', cost:60000000, prob:0.12,
      desc:'더 강한 불 · 12% 확률 — 맞은 적이 더 센 화상 5초'},
-    {id:'lava',  n:'용암', ic:'🌋', col:'#ff3b1f', parent:'fire', cost:260000, prob:0.05, cd:12,
+    {id:'lava',  n:'용암', ic:'🌋', col:'#ff3b1f', parent:'fire', cost:180000000, prob:0.05, cd:12,
      desc:'5% 확률로 용암 공격 — 모든 적이 화상 (화염 인형과 같은 효과) · 12초마다 한 번'},
 
-    {id:'wind',  n:'바람', ic:'🌪', col:'#9df0ff', parent:null,   cost:30000,  prob:0.05,
+    {id:'wind',  n:'바람', ic:'🌪', col:'#9df0ff', parent:null,   cost:8000000,  prob:0.05,
      desc:'5% 확률로 바람 공격 — 맞은 적이 감속 5초 (감속 물약과 같은 효과)'},
-    {id:'gale',  n:'폭풍', ic:'🌀', col:'#7cf3c8', parent:'wind', cost:150000, prob:0.12,
+    {id:'gale',  n:'폭풍', ic:'🌀', col:'#7cf3c8', parent:'wind', cost:60000000, prob:0.12,
      desc:'더 강한 바람 · 12% 확률 — 맞은 적이 감속 8초'},
-    {id:'bolt',  n:'번개', ic:'⚡', col:'#ffe066', parent:'wind', cost:260000, prob:0.05, cd:13,
+    {id:'bolt',  n:'번개', ic:'⚡', col:'#ffe066', parent:'wind', cost:180000000, prob:0.05, cd:13,
      desc:'5% 확률로 번개 공격 — 모든 적이 감속 5초 + 약화 6초 · 13초마다 한 번'},
 
-    {id:'earth', n:'땅',   ic:'🪨', col:'#c08a4a', parent:null,    cost:30000,  prob:0.05,
+    {id:'earth', n:'땅',   ic:'🪨', col:'#c08a4a', parent:null,    cost:8000000,  prob:0.05,
      desc:'5% 확률로 땅 공격 — 맞은 적이 약화 6초 (약화 물약과 같은 효과)'},
-    {id:'quake', n:'지진', ic:'⛰', col:'#a9743a', parent:'earth', cost:150000, prob:0.12,
+    {id:'quake', n:'지진', ic:'⛰', col:'#a9743a', parent:'earth', cost:60000000, prob:0.12,
      desc:'더 강한 땅 · 12% 확률 — 맞은 적이 약화 9초 + 감속 4초'},
-    {id:'metal', n:'금속', ic:'⚙️', col:'#c9d3e0', parent:'earth', cost:260000, prob:0.05, cd:16,
+    {id:'metal', n:'금속', ic:'⚙️', col:'#c9d3e0', parent:'earth', cost:180000000, prob:0.05, cd:16,
      desc:'5% 확률로 금속 공격 — 모든 적이 즉시 최대체력 5% 피해 · 16초마다 한 번'},
   ],
   dolls:[{key:'revive',  n:'부활인형', desc:'죽은 아군 전원 부활(HP 40%)', cost:20000},
