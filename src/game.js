@@ -613,19 +613,28 @@ const keepBeam=b=>b.t<b.life;
 const keepNumber=n=>n.t<(n.life||(n.big?0.9:0.7));
 // ---- 루프 ----
 let last=0;
+let FRAME_ERRORS=0;                               // 스모크가 '루프가 살아남았는가'를 재는 자
 function frame(ts){
-  const elapsed=last?Math.min(.25,(ts-last)/1000):0;
-  last=ts;
-  if(elapsed<=0) update(0);
-  else {
-    let remaining=elapsed, steps=0;
-    while(remaining>0.00001 && steps<8){
-      const dt=Math.min(1/30,remaining);
-      update(dt); remaining-=dt; steps++;
-    }
-  }
-  draw();
+  // 다음 프레임을 먼저 예약한다. 이 줄이 함수 끝에 있으면 update/draw 가 한 번만 예외를
+  // 던져도 재예약이 건너뛰어져 게임이 영구 정지한다(검은 화면 + 새로고침 외 복구 불가).
   requestAnimationFrame(frame);
+  try{
+    const elapsed=last?Math.min(.25,(ts-last)/1000):0;
+    last=ts;
+    if(elapsed<=0) update(0);
+    else {
+      let remaining=elapsed, steps=0;
+      while(remaining>0.00001 && steps<8){
+        const dt=Math.min(1/30,remaining);
+        update(dt); remaining-=dt; steps++;
+      }
+    }
+    draw();
+  }catch(err){
+    // 조용히 삼키면 원인을 못 찾는다 — 첫 회는 반드시 남기고, 이후는 세기만 한다
+    // (60fps 로 같은 예외가 쏟아지면 콘솔이 원인을 덮는다).
+    if(FRAME_ERRORS++===0) console.error('[Wave Arena] frame 예외 — 루프는 계속한다:', err);
+  }
 }
 
 function update(dt){

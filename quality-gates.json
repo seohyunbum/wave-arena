@@ -17,7 +17,8 @@
     "stop-wave",
     "reduced-motion",
     "offline-navigation",
-    "visual-upgrade-progression"
+    "visual-upgrade-progression",
+    "frame-loop-resilience"
   ],
   "visuals": {
     "allyRanks": 16,

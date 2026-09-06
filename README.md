@@ -44,4 +44,4 @@ node scripts/balance-report.mjs --check
 node scripts/smoke-test.mjs http://127.0.0.1:4173/
 node scripts/perf-test.mjs http://127.0.0.1:4173/
 
-밸런스 검사는 시작 화력, 적 HP 대비 보상, 무기군 성장률, 보스 체력, 방어 상한의 느슨한 밴드만 판정합니다. 스모크는 4개 viewport, 시작·상점·회전·음소거, 포탑 배치·합체, 저장·복원, 끝내기, 16단계 기지·캐릭터 및 전 포탑·6종 발사체 진화 계약, reduced-motion, 전체 precache, 실제 offline 재탐색을 검사합니다. 성능 검사는 적 60마리와 최대 구조물 장면을 기본 CPU와 4배 CPU 제한에서 판정합니다. 임계값 정본은 quality-gates.json입니다.
+밸런스 검사는 시작 화력, 적 HP 대비 보상, 무기군 성장률, 보스 체력, 방어 상한의 느슨한 밴드만 판정합니다. 스모크는 4개 viewport, 시작·상점·회전·음소거, 포탑 배치·합체, 저장·복원, 끝내기, 16단계 기지·캐릭터 및 전 포탑·6종 발사체 진화 계약, reduced-motion, 전체 precache, 실제 offline 재탐색, 그리고 프레임 루프 생존(24×24 창에서도 배율이 양수인가 · 한 프레임의 예외가 게임을 멈추지 않는가)을 검사합니다. 성능 검사는 적 60마리와 최대 구조물 장면을 기본 CPU와 4배 CPU 제한에서 판정합니다. 임계값 정본은 quality-gates.json입니다.
