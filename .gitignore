@@ -4,3 +4,9 @@
 
 # CI/로컬 성능 evidence는 실행 artifact이며 소스가 아니다
 /artifacts/
+
+# Reproducible public distribution
+/_site/
+
+# Local Python signer cache
+__pycache__/
