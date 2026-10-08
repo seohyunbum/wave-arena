@@ -4,7 +4,7 @@
 
 - 저장소: C:\Users\서현범\Documents\wave-arena
 - 브랜치: main
-- 개편 전 감사 기준선: 529398daf21a4d9227897763542c702a9639e7b7
+- 개편 전 감사 기준선: 0606ad770903a513f9b8cf4c2650fb5a4f4c70eb
 - 현재 build ID 정본: src/build-meta.js
 - 품질 게이트 정본: quality-gates.json
 - 공개 URL: https://seohyunbum.github.io/wave-arena/
